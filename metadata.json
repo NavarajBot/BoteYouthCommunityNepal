@@ -1,0 +1,6 @@
+{
+  "name": "Bote Youth Community Nepal",
+  "description": "Official community platform for Tarahi Bote of Karmahiya, Sarlahi. Includes digital archive, community news feed, scholarship application center, and Google Search schema explorer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
