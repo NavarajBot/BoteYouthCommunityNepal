@@ -388,7 +388,7 @@ class BoteCommunityViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
-    fun registerCommunityAction(type: String, name: String, email: String, phone: String, details: String) {
+    fun registerCommunityAction(type: String, name: String, email: String, phone: String, age: String, details: String) {
         viewModelScope.launch {
             if (name.isBlank() || email.isBlank() || phone.isBlank()) {
                 _notificationMessage.emit("Error: All contact details are required!")
@@ -399,6 +399,7 @@ class BoteCommunityViewModel(application: Application) : AndroidViewModel(applic
                 applicantName = name,
                 email = email,
                 phone = phone,
+                age = age,
                 details = details
             )
             val insertedId = repository.insertRegistration(reg).toInt()
@@ -780,6 +781,42 @@ class BoteCommunityViewModel(application: Application) : AndroidViewModel(applic
                 onResult(true)
             }.onFailure { exception ->
                 _notificationMessage.emit("Google Connection Failed: ${exception.message}")
+                onResult(false)
+            }
+        }
+    }
+
+    fun startPhoneVerification(activity: android.app.Activity, phoneNumber: String, onCodeSent: (String) -> Unit) {
+        BoteAuthManager.startPhoneVerification(
+            activity = activity,
+            phoneNumber = phoneNumber,
+            onCodeSent = { verificationId ->
+                viewModelScope.launch {
+                    _notificationMessage.emit("Verification SMS code sent successfully.")
+                }
+                onCodeSent(verificationId)
+            },
+            onVerificationCompleted = { user ->
+                viewModelScope.launch {
+                    _notificationMessage.emit("Phone verified and signed in: Welcome, ${user.fullName}!")
+                }
+            },
+            onVerificationFailed = { exception ->
+                viewModelScope.launch {
+                    _notificationMessage.emit("SMS Verification Failed: ${exception.message}")
+                }
+            }
+        )
+    }
+
+    fun verifyPhoneCode(smsCode: String, phoneNumber: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = BoteAuthManager.verifyPhoneCode(getApplication(), smsCode, phoneNumber)
+            result.onSuccess { user ->
+                _notificationMessage.emit("Signed in successfully: Welcome, ${user.fullName}!")
+                onResult(true)
+            }.onFailure { exception ->
+                _notificationMessage.emit("OTP Verification Failed: ${exception.message}")
                 onResult(false)
             }
         }

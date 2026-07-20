@@ -49,6 +49,7 @@ data class Registration(
     val applicantName: String,
     val email: String,
     val phone: String,
+    val age: String = "",
     val details: String,
     val timestamp: Long = System.currentTimeMillis(),
     val status: String = "Under Review"

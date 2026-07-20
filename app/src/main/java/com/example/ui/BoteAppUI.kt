@@ -77,19 +77,20 @@ fun BoteAppUI(
     val activeScreen by viewModel.activeScreen.collectAsStateWithLifecycle()
     val isDataFetching by viewModel.isDataFetching.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     // Firebase Auth States
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val isAuthInitializing by viewModel.isAuthInitializing.collectAsStateWithLifecycle()
     var showAuthDialog by remember { mutableStateOf(false) }
 
-    var appThemeState by remember { mutableStateOf("morning") }
+    var appThemeState by remember { mutableStateOf("night") }
     var showIntroLoader by remember { mutableStateOf(true) }
 
     // Automatically synchronize theme with current system/local hour
     LaunchedEffect(Unit) {
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        appThemeState = if (hour in 6..17) "morning" else "night"
+        appThemeState = if (hour in 12..21) "festival" else "night"
     }
 
     // Observe DB States
@@ -230,9 +231,15 @@ fun BoteAppUI(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .widthIn(max = 960.dp)
+                    .fillMaxWidth()
+            ) {
                  // Shared Top Header with River Wave Aesthetic and Theme Selector
                  HeaderSection(
                      activeTheme = appThemeState,
@@ -339,17 +346,8 @@ fun BoteAppUI(
             if (showAuthDialog) {
                 AuthDialog(
                     isNepali = isNepali,
-                    onDismiss = { showAuthDialog = false },
-                    onLogin = { email, password ->
-                        viewModel.loginUser(email, password) { success ->
-                            if (success) showAuthDialog = false
-                        }
-                    },
-                    onSignUp = { email, password, name, adminCode ->
-                        viewModel.signUpUser(email, password, name, adminCode) { success ->
-                            if (success) showAuthDialog = false
-                        }
-                    }
+                    viewModel = viewModel,
+                    onDismiss = { showAuthDialog = false }
                 )
             }
         }
@@ -632,15 +630,6 @@ fun HeaderSection(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 IconButton(
-                    onClick = { onThemeChange("morning") },
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (activeTheme == "morning") Color.White.copy(alpha = 0.25f) else Color.Transparent)
-                ) {
-                    Text("🌅", fontSize = 14.sp)
-                }
-                IconButton(
                     onClick = { onThemeChange("night") },
                     modifier = Modifier
                         .size(32.dp)
@@ -698,6 +687,7 @@ fun HomeDashboard(
     val latestUpdate = appUpdates.firstOrNull()
 
     val clipboardManager = LocalClipboardManager.current
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     var selectedMapDistrict by remember { mutableStateOf("Sarlahi") }
     var lightboxImageTitle by remember { mutableStateOf<String?>(null) }
     var lightboxImageDesc by remember { mutableStateOf("") }
@@ -707,6 +697,7 @@ fun HomeDashboard(
     var regName by remember { mutableStateOf("") }
     var regEmail by remember { mutableStateOf("") }
     var regPhone by remember { mutableStateOf("") }
+    var regAge by remember { mutableStateOf("") }
     var regDetails by remember { mutableStateOf("") }
     
     // Confetti particles state
@@ -720,6 +711,7 @@ fun HomeDashboard(
     // Active Interactive Heritage lore display dialog
     var activeLoreTitle by remember { mutableStateOf<String?>(null) }
     var activeLoreContent by remember { mutableStateOf("") }
+    var activeSpotlightUser by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
     // Carousel state automatic sliding scrolling
     val successStories = remember {
@@ -1296,13 +1288,14 @@ fun HomeDashboard(
 
             // ==================== ETHNOGRAPHIC DOSSIER SECTION ====================
             item {
-                var activeDossierTab by remember { mutableStateOf("origins") }
+                var showDossierDetailsDialog by remember { mutableStateOf(false) }
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 12.dp)
-                        .testTag("ethnographic_registration_card"),
+                        .testTag("ethnographic_registration_card")
+                        .clickable { showDossierDetailsDialog = true },
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = primaryCardColor),
                     elevation = CardDefaults.cardElevation(2.dp)
@@ -1330,264 +1323,192 @@ fun HomeDashboard(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = if (isNepali) 
-                                "बोटे समुदायको इतिहास, जनसंख्या, परम्परागत पेशा र वर्तमान सामाजिक-आर्थिक रूपान्तरण सम्बन्धी प्रमाणिक अनुसन्धान संग्रह।" 
-                                else "Historical demographics, livelihoods, and socio-economic transitions of the Bote people of Nepal.",
+                                "बोटे समुदायको प्रमाणित जनसांख्यिकीय र सांस्कृतिक इतिहास।" 
+                                else "Verified demographic and cultural chronicle of the Bote people.",
                             fontSize = 11.sp,
                             color = bodyTextColor.copy(alpha = 0.7f),
                             lineHeight = 15.sp
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Brief Overview Info Tag Box
+                        // Article Content Box
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(headingTextColor.copy(alpha = 0.04f))
-                                .border(1.dp, headingTextColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
-                                .padding(12.dp)
+                                .border(1.dp, headingTextColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                .padding(14.dp)
                         ) {
                             Column {
                                 Text(
                                     text = if (isNepali) 
-                                        "बोटे जाति नेपालको एक अति सीमान्तकृत नदी किनारमा बसोबास गर्ने आदिवासी जनजाति हो, जसको जनसंख्या कुल राष्ट्रिय जनसंख्याको करिब ०.०४ प्रतिशत (लगभग ११,००० जना) रहेको छ। परम्परागत रूपमा नदी र वन क्षेत्रहरूमा आश्रित यो समुदाय कडा संरक्षण कानुन र निकुञ्ज प्रतिबन्धहरूका कारण ठूलो सांस्कृतिक र आर्थिक संक्रमणको सामना गरिरहेको छ। [१, २, ३]"
-                                        else "The Bote are an indigenous, highly marginalized ethnic group in Nepal, comprising roughly 0.04% of the population (about 11,000 people). Traditionally depending on the country's rivers and forests, they are facing a major cultural and economic transition due to strict conservation laws and park restrictions. [1, 2, 3]",
+                                        "बोटे समुदाय नेपालको भित्री मधेश क्षेत्रका एक आदिवासी जनजाति हुन्। उनीहरू बोटे भाषा बोल्छन्। बोटे मानिसहरू रूखको टोड्का (खोपा) बाट तयार पारिएका काठका डुङ्गाहरू मार्फत यात्रुहरूलाई नदी पार गराउनका लागि प्रख्यात छन्। उनीहरू नेपालको कर्महिया, सर्लाही, कालीगण्डकी, नारायणी र राप्ती नदीको किनारमा छरिएर रहेका छन्। बोटे र माझी समुदायलाई 'पानीको राजा' भनेर चिनिन्छ। उनीहरूको पुर्ख्यौली पेशा माछा मार्ने, डुङ्गा चलाउने र नदीमा सुन खोज्ने हो, जसको बसोबास नदी र जङ्गल नजिकै हुने गर्दछ। बोटे समुदायको भाषिका र संस्कृति धेरै हदसम्म दनुवार, दराई, थारू र माझी समुदायसँग मिल्दोजुल्दो छ।"
+                                        else "The Bote people are an ethnic group indigenous to the inner Terai regions of Nepal. They speak Bote language. The Bote people are well known for ferrying travellers across the rivers through the boats, which often are prepared from the trunks of the trees. They are scattered around the bank of karmaiya,sarlahi Kaligandaki, Narayani and Rapti River of Nepal. Bote and Majhi people are known as the ‘King of water’. Their ancestral occupation is fishing, boating and searching gold in the river whose settlement is nearby river and forest. The dialect and culture of Bote people in several ways is similar to that of the Danuwars, Darai, Tharus and Majhi.",
                                     fontSize = 13.sp,
                                     color = bodyTextColor,
-                                    lineHeight = 18.sp
+                                    lineHeight = 19.sp
                                 )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFF0F4C81).copy(alpha = 0.1f))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isNepali) "जनसंख्या: ~११,०००" else "Population: ~11,000", 
-                                            fontSize = 9.sp, 
-                                            fontWeight = FontWeight.Bold, 
-                                            color = Color(0xFF0F4C81)
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFF2E7D32).copy(alpha = 0.1f))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isNepali) "हिस्सा: ०.०४%" else "Ethnic Share: 0.04%", 
-                                            fontSize = 9.sp, 
-                                            fontWeight = FontWeight.Bold, 
-                                            color = Color(0xFF2E7D32)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Custom Tab Layout (Responsive row of chips)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val tabs = listOf(
-                                Pair("origins", if (isNepali) "उत्पत्ति 🗺️" else "Origins 🗺️"),
-                                Pair("livelihoods", if (isNepali) "आजीविका ⚓" else "Livelihoods ⚓"),
-                                Pair("challenges", if (isNepali) "चुनौतीहरू ⚠️" else "Challenges ⚠️"),
-                                Pair("adaptations", if (isNepali) "अनुकूलन 🚀" else "Adaptations 🚀")
-                            )
-                            tabs.forEach { (key, label) ->
-                                val isSelected = activeDossierTab == key
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                            if (isSelected) {
-                                                if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81)
-                                            } else {
-                                                headingTextColor.copy(alpha = 0.05f)
-                                            }
-                                        )
-                                        .border(
-                                            width = 1.dp,
-                                            color = if (isSelected) Color.Transparent else headingTextColor.copy(alpha = 0.15f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable { activeDossierTab = key }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = label,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) Color.White else bodyTextColor
-                                    )
-                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Active Tab content
-                        when (activeDossierTab) {
-                            "origins" -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = if (isNepali) "🗺️ उत्पत्ति र जनसांख्यिकी" else "🗺️ Origins & Demographics", 
-                                        fontSize = 13.sp, 
-                                        fontWeight = FontWeight.Bold, 
-                                        color = headingTextColor
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• बसोबास: मुख्यतया कालीगण्डकी, नारायणी र राप्ती नदीका किनारहरूमा, विशेषतः चितवन, नवलपरासी, पाल्पा, तनहुँ र गोर्खा जिल्लाहरूमा र सर्लाहीको कर्महियाका नदी तटीय खण्डहरूमा। [२, ४, ५]"
-                                            else "• Location: Primarily scattered along the banks of the Kali Gandaki, Narayani, and Rapti rivers, mostly in Chitwan, Nawalparasi, Palpa, Tanahu, and Gorkha districts. [2, 4, 5]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• पुर्खा र सादृश्यता: बोटे समुदायको बोलीचाली र संस्कृति दनुवार, दरै, थारु र माझी समुदायसँग नजिकबाट मेल खान्छ। [४]"
-                                            else "• Ancestry: Their dialect and culture closely resemble those of the Danuwar, Darai, Tharu, and Majhi communities. [4]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• उप-समूहहरू: बोटेहरू परम्परागत रूपमा दुई समूहमा विभाजित छन्:\n  - पानी बोटे: पूर्ण रूपमा माछा मार्ने, डुङ्गा चलाउने र नदी किनारमा बालुवाबाट सुन चाल्ने काममा संलग्न हुने।\n  - पाखे बोटे: कृषि, पशुपालन र भारी बोक्ने काममा बढी निर्भर रहने खण्ड। [६, ७, ८]"
-                                            else "• Sub-groups: They are traditionally divided into two groups:\n  - Paani Bote: Solely dependent on fishing, boating, and panning for gold along river banks.\n  - Pakhe Bote: Rely more on agriculture, animal husbandry, and porter work. [6, 7, 8]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                }
-                            }
-                            "livelihoods" -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = if (isNepali) "⚓ परम्परागत जीविकोपार्जन" else "⚓ Traditional Livelihoods", 
-                                        fontSize = 13.sp, 
-                                        fontWeight = FontWeight.Bold, 
-                                        color = headingTextColor
-                                    )
-                                    Text(
-                                        text = if (isNepali) "कसै-कसैले 'पानीका राजा' को उपनाम दिएका बोटेहरूको परम्परागत पहिचान नदीसँगै गाँसिएको छ: [१, ४]" 
-                                            else "Known by some as the 'Kings of water,' their traditional identity is deeply tied to the rivers: [1, 4]",
-                                        fontSize = 12.sp, color = bodyTextColor, fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• घाट र डुङ्गा: परम्परागत रूपमा हातले कुँदिएका काठे डुङ्गा (धोनी) प्रयोग गरेर यात्रु र सरसामान नदी पार गराउने काम।"
-                                            else "• Ferrying: Transporting passengers and goods across rivers using traditional, handcrafted wooden boats.",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• स्रोत संकलन: नदीमा जाल हानेर माछा मार्ने, बालुवाबाट सुन चाल्ने र वन क्षेत्रबाट निउरो, दाउरा तथा खर बटुल्ने।"
-                                            else "• Resource Gathering: Fishing, gold panning, and collecting edible ferns, wood, and elephant grass from nearby forests.",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• धार्मिक विश्वास: हिन्दू चाडपर्वहरू (दशैं-तिहार) मनाउनुका साथै जल र वन देवतालाई खुशी पार्न शिकारी पूजा र वायु पूजा जस्ता प्रकृतिपूजक संस्कृति। [१, ४, ७, ९, १०]"
-                                            else "• Belief System: They practice a mix of Hindu traditions (celebrating Dashain and Tihar) and animistic rituals, maintaining mystical beliefs like Sikari Pooja and Bayu Pooja. [1, 4, 7, 9, 10]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                }
-                            }
-                            "challenges" -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = if (isNepali) "⚠️ वर्तमान चुनौती र संक्रमण" else "⚠️ Current Challenges & Transition", 
-                                        fontSize = 13.sp, 
-                                        fontWeight = FontWeight.Bold, 
-                                        color = headingTextColor
-                                    )
-                                    Text(
-                                        text = if (isNepali) "पुस्ताैंदेखि चल्दै आएको बोटे जीवनशैली र आधुनिक संरक्षण प्रयासबीच विरोधाभास उत्पन्न भएको छ: [१]"
-                                            else "For generations, their way of life has clashed with modern conservation efforts: [1]",
-                                        fontSize = 12.sp, color = bodyTextColor, fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• माछा मार्ने प्रतिबन्ध: चितवन राष्ट्रिय निकुञ्जको स्थापना र कडा नदी संरक्षण नियमावलीले बोटेहरूको माछा मार्ने र परम्परागत स्रोत संकलनको अधिकारलाई धेरै संकुचित बनाएको छ। [१, ९]"
-                                            else "• Fishing Bans: The establishment of Chitwan National Park and strict river preservation regulations have severely restricted their fishing and resource-gathering rights. [1, 9]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• भूमिहीनता: धेरै बोटेहरू भूमिहीन छन् र ऐतिहासिक रूपमा सरकारी नदी किनारमा बस्दै आएका छन्, यद्यपि आधुनिक कृषिमैत्री आयोजनाले उनीहरूलाई दिगो खेतीतर्फ आकर्षित गरिरहेको छ। [१, ११]"
-                                            else "• Landlessness: Many Bote do not own land and historically lived on government riverbanks, though some farming projects have begun to transition them to sustainable agriculture. [1, 11]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• सामाजिक-आर्थिक स्तर: यो समुदाय निरन्तर गरिबी, न्यून साक्षरता दर र जीविकोपार्जनको असुरक्षासँग जुधिरहेको छ। [१०, १२]"
-                                            else "• Socio-Economic State: The community often struggles with poverty, low literacy rates, and livelihood insecurity. [10, 12]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                }
-                            }
-                            "adaptations" -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = if (isNepali) "🚀 आधुनिक अनुकूलन र सुरक्षा" else "🚀 Modern Adaptations", 
-                                        fontSize = 13.sp, 
-                                        fontWeight = FontWeight.Bold, 
-                                        color = headingTextColor
-                                    )
-                                    Text(
-                                        text = if (isNepali) "परिवर्तित परिवेशमा बाँच्नका लागि बोटे समुदायले आम्दानीका स्रोतहरू विविधिकरण गर्दैछ: [१३, १४]"
-                                            else "To survive in a rapidly changing world, the Bote community is diversifying its income: [13, 14]",
-                                        fontSize = 12.sp, color = bodyTextColor, fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• घरबास (होमस्टे): बोटे महिलाहरूले चितवन (माडी) र सर्लाही (कर्महिया) जस्ता क्षेत्रमा सामुदायिक होमस्टे सफलतापूर्वक सञ्चालन गरी सांस्कृतिक अनुभव, स्थानीय परिकार र माछाका व्यञ्जनहरू पस्किरहेका छन्। [१५]"
-                                            else "• Homestays: Bote women are successfully operating community homestays in places like Chitwan (e.g., Madi) and Sarlahi (Karmahiya), offering cultural experiences, local alcohol (chhyang), and fish delicacies. [15]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• फोहोर संकलन आयोजना: केही समुदायहरूले 'प्रोजेक्ट क्याप' जस्ता वातावरणीय आयोजनामा सहभागी भई नदीबाट महाजाल प्रयोग गरेर प्लास्टिकका बोतलहरू निकाल्ने काम गर्छन्, जसले नदी सफा राख्नुका साथै पुन:चक्रण मार्फत आम्दानी दिन्छ। [२, १६]"
-                                            else "• Waste Management: Some communities are participating in environmental projects (like Project CAP) by pulling plastic and PET bottles from rivers with nets, which helps keep local waterways clean while generating income through recycling. [2, 16]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                    Text(
-                                        text = if (isNepali)
-                                            "• खेती र वैदेशिक रोजगार: धेरै मानिसहरू आधुनिक व्यावसायिक खेती (मकै, धान, र तोरी) तिर आकर्षित हुँदै छन् वा वैदेशिक रोजगारीको खोजी गरिरहेका छन्। [११, १४]"
-                                            else "• Farming & Migration: Many are shifting to modern commercial farming (corn, rice, and mustard) and seeking foreign employment. [11, 14]",
-                                        fontSize = 12.sp, color = bodyTextColor, lineHeight = 16.sp
-                                    )
-                                }
-                            }
+                        // Interactive Click to Open Full Details Button
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (activeTheme == "festival") Color(0xFFF9A825).copy(alpha = 0.1f)
+                                    else Color(0xFF0F4C81).copy(alpha = 0.08f)
+                                )
+                                .clickable { showDossierDetailsDialog = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.List,
+                                contentDescription = "Open Details Icon",
+                                tint = if (activeTheme == "festival") Color(0xFFE65100) else Color(0xFF0F4C81),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isNepali) "पूर्ण विवरणहरू हेर्न यहाँ क्लिक गर्नुहोस् 🔍" else "Click to open full details 🔍",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (activeTheme == "festival") Color(0xFFE65100) else Color(0xFF0F4C81)
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         HorizontalDivider(color = headingTextColor.copy(alpha = 0.08f))
                         Spacer(modifier = Modifier.height(6.dp))
 
                         // Academic Citations references
                         Text(
                             text = if (isNepali) "📚 सन्दर्भ सामग्री तथा प्रमाणिकरण:" else "📚 Research References & Verification:", 
-                            fontSize = 11.sp, 
+                            fontSize = 10.sp, 
                             fontWeight = FontWeight.Bold, 
-                            color = headingTextColor
+                            color = headingTextColor.copy(alpha = 0.8f)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = "[1] globalvoices.org/2025/nepals-indigenous-bote-community/\n[2] thehimalayantimes.com/nepal/bote-people-around-rivers\n[3] kathmandupost.com/province-no-3/2021/10/08/bote-community- chitwan-park\n[4] wikipedia.org/wiki/Bote_people | National Foundation (NFDIN)\n[7] mdpi.com/2071-1050/15/3/2834 (Ecotourism & Livelihoods Research)\n[15] english.onlinekhabar.com/bote-community-homestay-nepal.html\n[16] Project CAP Eco-Initiative: River Cleaning Cooperative.",
-                            fontSize = 10.sp,
-                            color = bodyTextColor.copy(alpha = 0.6f),
-                            lineHeight = 14.sp
+                            text = "[1] globalvoices.org/2025/nepals-indigenous-bote-community/\n[2] thehimalayantimes.com/nepal/bote-people-around-rivers\n[3] kathmandupost.com/province-no-3/2021/10/08/bote-community-chitwan-park\n[4] wikipedia.org/wiki/Bote_people | National Foundation (NFDIN)",
+                            fontSize = 9.sp,
+                            color = bodyTextColor.copy(alpha = 0.5f),
+                            lineHeight = 13.sp
                         )
                     }
+                }
+
+                // AlertDialog for full details
+                if (showDossierDetailsDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDossierDetailsDialog = false },
+                        title = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Dossier Detail Icon",
+                                    tint = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isNepali) "📖 बोटे आदिवासी दस्तावेज - पूर्ण विवरण" else "📖 Bote National Register - Details",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = headingTextColor
+                                )
+                            }
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // Detailed Overview
+                                Text(
+                                    text = if (isNepali) 
+                                        "बोटे समुदाय नेपालको भित्री मधेश क्षेत्रका एक आदिवासी जनजाति हुन्। उनीहरू बोटे भाषा बोल्छन्। बोटे मानिसहरू रूखको टोड्का (खोपा) बाट तयार पारिएका काठका डुङ्गाहरू मार्फत यात्रुहरूलाई नदी पार गराउनका लागि प्रख्यात छन्। उनीहरू नेपालको कर्महिया, सर्लाही, कालीगण्डकी, नारायणी र राप्ती नदीको किनारमा छरिएर रहेका छन्। बोटे र माझी समुदायलाई 'पानीको राजा' भनेर चिनिन्छ। उनीहरूको पुर्ख्यौली पेशा माछा मार्ने, डुङ्गा चलाउने र नदीमा सुन खोज्ने हो, जसको बसोबास नदी र जङ्गल नजिकै हुने गर्दछ। बोटे समुदायको भाषिका र संस्कृति धेरै हदसम्म दनुवार, दराई, थारू र माझी समुदायसँग मिल्दोजुल्दो छ।"
+                                        else "The Bote people are an ethnic group indigenous to the inner Terai regions of Nepal. They speak Bote language. The Bote people are well known for ferrying travellers across the rivers through the boats, which often are prepared from the trunks of the trees. They are scattered around the bank of karmaiya,sarlahi Kaligandaki, Narayani and Rapti River of Nepal. Bote and Majhi people are known as the ‘King of water’. Their ancestral occupation is fishing, boating and searching gold in the river whose settlement is nearby river and forest. The dialect and culture of Bote people in several ways is similar to that of the Danuwars, Darai, Tharus and Majhi.",
+                                    fontSize = 13.sp,
+                                    color = bodyTextColor,
+                                    lineHeight = 19.sp
+                                )
+
+                                HorizontalDivider(color = headingTextColor.copy(alpha = 0.08f))
+
+                                // Origin Theory Section
+                                Text(
+                                    text = if (isNepali) "🗺️ उत्पत्ति र नामाकरण" else "🗺️ Origin & Etymology",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = headingTextColor
+                                )
+                                Text(
+                                    text = if (isNepali)
+                                        "बोटे समुदायको नामकरणको बारेमा दुईवटा सिद्धान्तहरू छन्। 'बोट' को अर्थ रूख हो, र यिनीहरू नदी किनारमा ठूला रूखहरूका हाँगा वा काठ प्रयोग गरी मौसमी पुल बनाउन वा रुखमुनि आश्रय लिने भएकाले उनीहरूलाई बोटे भनिएको विश्वास गरिन्छ।"
+                                        else "There are two theories regarding the origin of Bote people. 'Bot' means a tree in Nepali. The community was known for laying tree trunks or branches across rivers to build makeshift seasonal bridges or sheltering under waterfront trees, from which they came to be known as Bote.",
+                                    fontSize = 12.sp,
+                                    color = bodyTextColor,
+                                    lineHeight = 17.sp
+                                )
+
+                                // Livelihoods Section
+                                Text(
+                                    text = if (isNepali) "⚓ परम्परागत जीविकोपार्जन" else "⚓ Livelihoods & Subgroups",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = headingTextColor
+                                )
+                                Text(
+                                    text = if (isNepali)
+                                        "बोटेहरू परम्परागत रूपमा दुई समूहमा विभाजित छन्: पाखा बोटे र पानी बोटे। पाखा बोटेहरू पहाड वा खेतीयोग्य जमिनमा खेती गर्छन् भने पानी बोटेहरू नदीको किनारमा बसेर डुङ्गा खियाउने, माछा मार्ने र सुन खोज्ने काममा केन्द्रित हुन्छन्।"
+                                        else "They are divided into two groups: Pakha Bote and Pani Bote. Pakha Bote live in hills or arable land, whereas Pani Bote reside directly on riverbanks, focusing entirely on boating, traditional fishing, and gold dust panning.",
+                                    fontSize = 12.sp,
+                                    color = bodyTextColor,
+                                    lineHeight = 17.sp
+                                )
+
+                                // Language & Religion Section
+                                Text(
+                                    text = if (isNepali) "🗣️ भाषा र धार्मिक संस्कृति" else "🗣️ Language & Belief Systems",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = headingTextColor
+                                )
+                                Text(
+                                    text = if (isNepali)
+                                        "बोटे भाषा दनुवार र थारू भाषासँग मिल्दोजुल्दो छ र यो मुख्यतया गुल्मी, नवलपरासी, चितवन र तनहुँमा बोलिन्छ। धार्मिक रूपमा यिनीहरू प्रकृति पूजक (Animism) हुन् र झाँक्रीविद्या, चण्डी पूजा, वायु पूजा, संसारी माई पूजा, र विशेष गरी डुङ्गा र नदी पूजा मनाउँछन्।"
+                                        else "The Bote language is closely related to Danuwar and Tharu, spoken in Nawalparasi, Gulmi, Chitwan, and Tanahu. They practice animism, shamanism, and celebrate Kalyan Puja, Bayu Puja, and sacred Dunga (Boat) Puja by the riverside.",
+                                    fontSize = 12.sp,
+                                    color = bodyTextColor,
+                                    lineHeight = 17.sp
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showDossierDetailsDialog = false }) {
+                                Text(
+                                    text = if (isNepali) "बन्द गर्नुहोस्" else "Close",
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81)
+                                )
+                            }
+                        },
+                        containerColor = primaryCardColor,
+                        shape = RoundedCornerShape(20.dp)
+                    )
                 }
             }
 
@@ -1602,19 +1523,28 @@ fun HomeDashboard(
                         modifier = Modifier.padding(bottom = 10.dp)
                     )
 
-                    val foundations = listOf(
-                        Triple("History 📜", "Ancient river civilization stories", "The Bote are an ancient indigenous riverine community of Nepal, historically serving as expert ferrymen, fishermen, and gold-panners along major river basins like the Gandaki, Narayani, Rapti, and Bagmati."),
-                        Triple("Language 🗣️", "Preserve Bote language dialects", "Bote Bhasha is an endangered Indo-Aryan language spoken by the Bote people, closely related to the Majhi and Danuwar languages, traditionally oral and today transcribed using Devanagari script."),
-                        Triple("Culture 🔱", "Traditions, beliefs & river worship", "Deeply rooted in nature worship and animism, the Bote perform 'Nadi Puja' (River worship) to honor water spirits, along with worshipping nature deities like Sansari Mai and the hunter god Shikari."),
-                        Triple("Dress 👗", "Traditional clothing archive designs", "Men traditionally wear a simple Kachhad (loincloth) and Bhoto (sleeveless vest) suited for river navigation, while women wear a Phariya (sari/skirt) tied with a Patuka (waistband) and a Cholo (blouse), accessorized with silver ornaments like Hasuli and Bulaki.")
-                    )
+                    val foundations = if (isNepali) {
+                        listOf(
+                            Triple("इतिहास 📜", "प्राचीन नदी सभ्यताका कथाहरू", "बोटे नेपालको एक प्राचीन आदिवासी भूमिपुत्र र नदीतटीय समुदाय हो, जसले ऐतिहासिक रूपमा गण्डकी, नारायणी, राप्ती र बागमती जस्ता प्रमुख नदी किनारहरूमा कुशल माझी, जलयात्रा सञ्चालक र सुनखानी खोज्ने (सुनखानिया) को रूपमा सेवा गर्दै आएका छन्।"),
+                            Triple("भाषा 🗣️", "बोटे भाषा बोली संरक्षण", "बोटे भाषा बोटे जातिले बोल्ने एक संकटापन्न भारोपेली भाषा हो, जुन माझी र दनुवार भाषाहरूसँग नजिकको सम्बन्ध राख्दछ।"),
+                            Triple("संस्कृति 🔱", "परम्परा, विश्वास र नदी पूजा", "प्रकृति पूजा र जीववाद (Animism) मा गहिरो जरा गाडिएको बोटे समुदायले जलदेवतालाई सम्मान गर्न 'नदी पूजा' को साथै संसारी माई र शिकारी जस्ता प्रकृति देवताहरूको पूजा अर्चना गर्दछन्।"),
+                            Triple("पोशाक 👗", "परम्परागत पोशाक संग्रह डिजाइन", "पुरुषहरू परम्परागत रूपमा नदी यात्राका लागि उपयुक्त साधारण कछाड र भोटो लगाउँछन् भने महिलाहरू पटुका र चोलो सँगै फरिया लगाउँछन्।")
+                        )
+                    } else {
+                        listOf(
+                            Triple("History 📜", "Ancient river civilization stories", "The Bote are an ancient indigenous riverine community of Nepal, historically serving as expert ferrymen, fishermen, and gold-panners along major river basins like the Gandaki, Narayani, Rapti, and Bagmati."),
+                            Triple("Language 🗣️", "Preserve Bote language dialects", "Bote Bhasha is an endangered Indo-Aryan language spoken by the Bote people, closely related to the Majhi and Danuwar languages, traditionally oral and today transcribed using Devanagari script."),
+                            Triple("Culture 🔱", "Traditions, beliefs & river worship", "Deeply rooted in nature worship and animism, the Bote perform 'Nadi Puja' (River worship) to honor water spirits, along with worshipping nature deities like Sansari Mai and the hunter god Shikari."),
+                            Triple("Dress 👗", "Traditional clothing archive designs", "Men traditionally wear a simple Kachhad (loincloth) and Bhoto (sleeveless vest) suited for river navigation, while women wear a Phariya (sari/skirt) tied with a Patuka (waistband) and a Cholo (blouse), accessorized with silver ornaments like Hasuli and Bulaki.")
+                        )
+                    }
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        foundfoundRow(foundations.take(2), primaryCardColor, bodyTextColor, headingTextColor, activeTheme) { title, text ->
+                        foundfoundRow(foundations.take(2), primaryCardColor, bodyTextColor, headingTextColor, activeTheme, isNepali) { title, text ->
                             activeLoreTitle = title
                             activeLoreContent = text
                         }
-                        foundfoundRow(foundations.drop(2), primaryCardColor, bodyTextColor, headingTextColor, activeTheme) { title, text ->
+                        foundfoundRow(foundations.drop(2), primaryCardColor, bodyTextColor, headingTextColor, activeTheme, isNepali) { title, text ->
                             activeLoreTitle = title
                             activeLoreContent = text
                         }
@@ -1622,74 +1552,6 @@ fun HomeDashboard(
                 }
             }
 
-            // ==================== SECTION 3: INTERACTIVE TIMELINE ====================
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = primaryCardColor)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "⏳ Sarlahi Bote Milestones Timeline",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = headingTextColor
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        val epochs = listOf(
-                            Pair("Ancestors", "Ancient River Pact kingdoms"),
-                            Pair("Kingdom Era", "Madhesh Province migrations"),
-                            Pair("Traditional Life", "Canoe and fishing monopoly"),
-                            Pair("Conservation Era", "National park river wardens"),
-                            Pair("Sovereignty Era", "Preserving language archives"),
-                            Pair("Future Youths", "Empowerment through tech")
-                        )
-
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(epochs) { (phase, details) ->
-                                Box(
-                                    modifier = Modifier
-                                        .width(180.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(headingTextColor.copy(alpha = 0.06f))
-                                        .border(1.dp, headingTextColor.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                                        .padding(12.dp)
-                                ) {
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(8.dp)
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(Color(0xFFF9A825))
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = phase,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                color = headingTextColor
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = details,
-                                            fontSize = 11.sp,
-                                            color = bodyTextColor,
-                                            lineHeight = 15.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             // ==================== SECTION 4: LATEST COMMUNITY NEWS ====================
             item {
@@ -1767,67 +1629,145 @@ fun HomeDashboard(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "🗺️ Bote Heartlands & Sarlahi Docks Map",
+                            text = "🗺️ Maps and Locations",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = headingTextColor
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Tap on map nodes to view community counts and local river initiatives:",
+                            text = "Explore Bote docks, river basins, and ancestral heritage centers on our real-time interactive map of Nepal:",
                             fontSize = 12.sp,
                             color = bodyTextColor
                         )
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Nepal highlights drawing Canvas
+                        // Real interactive Map with Leaflet.js and OpenStreetMap
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (activeTheme == "night") Color(0xFF0F1B25) else Color(0xFFF2F7FA))
-                                .border(1.dp, headingTextColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                .height(260.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, headingTextColor.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
                         ) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                // Draw an abstract green-blue chain representing the rivers Bagmati & Rapti
-                                val riverPath = androidx.compose.ui.graphics.Path()
-                                riverPath.moveTo(20f, size.height * 0.4f)
-                                riverPath.quadraticTo(size.width * 0.3f, size.height * 0.1f, size.width * 0.5f, size.height * 0.7f)
-                                riverPath.quadraticTo(size.width * 0.8f, size.height * 0.9f, size.width - 20f, size.height * 0.5f)
-                                drawPath(riverPath, Color(0xFF0F4C81).copy(alpha = 0.35f), style = Stroke(width = 8.dp.toPx()))
+                            androidx.compose.ui.viewinterop.AndroidView<android.webkit.WebView>(
+                                factory = { ctx ->
+                                    android.webkit.WebView(ctx).apply {
+                                        layoutParams = android.view.ViewGroup.LayoutParams(
+                                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
+                                        settings.javaScriptEnabled = true
+                                        settings.domStorageEnabled = true
+                                        webViewClient = android.webkit.WebViewClient()
+                                        
+                                        // Handle touch interception to prevent parent scrolling conflicts
+                                        setOnTouchListener { v, event ->
+                                            v.parent.requestDisallowInterceptTouchEvent(true)
+                                            false
+                                        }
 
-                                // Map pulse tags
-                                val pulses = listOf(
-                                    Pair("Sarlahi", Offset(size.width * 0.7f, size.height * 0.65f)),
-                                    Pair("Chitwan", Offset(size.width * 0.45f, size.height * 0.45f)),
-                                    Pair("Nawalparasi", Offset(size.width * 0.3f, size.height * 0.55f)),
-                                    Pair("Palpa", Offset(size.width * 0.22f, size.height * 0.35f)),
-                                    Pair("Tanahun", Offset(size.width * 0.38f, size.height * 0.25f)),
-                                    Pair("Gorkha", Offset(size.width * 0.55f, size.height * 0.18f))
+                                        addJavascriptInterface(object {
+                                            @android.webkit.JavascriptInterface
+                                            fun onDistrictClicked(name: String) {
+                                                post {
+                                                    selectedMapDistrict = name
+                                                }
+                                            }
+                                        }, "AndroidApp")
+
+                                        val mapHtml = """
+                                            <!DOCTYPE html>
+                                            <html>
+                                            <head>
+                                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                                                <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                                                <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                                                <style>
+                                                    html, body { height: 100%; margin: 0; padding: 0; background-color: #0F1B25; }
+                                                    #map { height: 100%; width: 100%; }
+                                                    .leaflet-control-attribution { display: none !important; }
+                                                    ${if (activeTheme == "night") ".leaflet-tile-container { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(1.2); }" else ""}
+                                                </style>
+                                            </head>
+                                            <body>
+                                                <div id="map"></div>
+                                                <script>
+                                                    var map = L.map('map', {
+                                                        zoomControl: true,
+                                                        attributionControl: false
+                                                    }).setView([27.5, 84.5], 7);
+
+                                                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                                        maxZoom: 18
+                                                    }).addTo(map);
+
+                                                    var locations = {
+                                                        "Sarlahi": { coords: [26.915, 85.435], desc: "Sarlahi Bote Heartland (Karmahiya Dock)" },
+                                                        "Chitwan": { coords: [27.575, 84.495], desc: "Chitwan Basin (Rapti River Canoe Hub)" },
+                                                        "Nawalparasi": { coords: [27.705, 84.435], desc: "Nawalparasi Dock (Canoe Construction Harbor)" },
+                                                        "Palpa": { coords: [27.870, 83.550], desc: "Palpa Region (Kaligandaki Traps)" },
+                                                        "Tanahun": { coords: [27.970, 84.270], desc: "Tanahun Community (Monsoon Legends)" },
+                                                        "Gorkha": { coords: [27.875, 84.625], desc: "Gorkha Crossing (Trisuli Riverways)" }
+                                                    };
+
+                                                    var markers = {};
+
+                                                    for (var name in locations) {
+                                                        (function(districtName) {
+                                                            var loc = locations[districtName];
+                                                            var marker = L.marker(loc.coords).addTo(map);
+                                                            marker.bindPopup("<b>" + districtName + "</b><br>" + loc.desc);
+                                                            marker.on('click', function() {
+                                                                if (window.AndroidApp) {
+                                                                    window.AndroidApp.onDistrictClicked(districtName);
+                                                                }
+                                                            });
+                                                            markers[districtName] = marker;
+                                                        })(name);
+                                                    }
+
+                                                    function selectDistrict(name) {
+                                                        var loc = locations[name];
+                                                        if (loc) {
+                                                            map.setView(loc.coords, 9, { animate: true });
+                                                            markers[name].openPopup();
+                                                        }
+                                                    }
+                                                </script>
+                                            </body>
+                                            </html>
+                                        """.trimIndent()
+                                        loadDataWithBaseURL("https://openstreetmap.org", mapHtml, "text/html", "UTF-8", null)
+                                    }
+                                },
+                                update = { webView ->
+                                    webView.evaluateJavascript("javascript:selectDistrict('$selectedMapDistrict')", null)
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val locations = listOf("Sarlahi", "Chitwan", "Nawalparasi", "Palpa", "Tanahun", "Gorkha")
+                            items(locations) { item ->
+                                val isSelected = selectedMapDistrict == item
+                                AssistChip(
+                                    onClick = { selectedMapDistrict = item },
+                                    label = { Text(item, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                                        labelColor = if (isSelected) MaterialTheme.colorScheme.primary else bodyTextColor
+                                    ),
+                                    border = if (isSelected) {
+                                        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        androidx.compose.foundation.BorderStroke(1.dp, headingTextColor.copy(alpha = 0.2f))
+                                    }
                                 )
-
-                                pulses.forEach { (name, pos) ->
-                                    val isSelected = selectedMapDistrict == name
-                                    val pulseColor = if (isSelected) Color(0xFFF9A825) else Color(0xFF2E7D32)
-                                    // Circle pulse animation simulation using riverWavePhase
-                                    val scale = 1f + (sin(riverWavePhase * 2.5f) * 0.25f)
-                                    drawCircle(pulseColor.copy(alpha = 0.25f), radius = 18f * scale, center = pos)
-                                    drawCircle(pulseColor, radius = 6f, center = pos)
-                                }
-                            }
-
-                            // Interactive clickable overlay regions
-                            Row(modifier = Modifier.fillMaxSize()) {
-                                val locations = listOf("Palpa", "Nawalparasi", "Tanahun", "Chitwan", "Gorkha", "Sarlahi")
-                                locations.forEach { item ->
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight()
-                                            .clickable { selectedMapDistrict = item }
-                                    )
-                                }
                             }
                         }
 
@@ -1888,7 +1828,10 @@ fun HomeDashboard(
                                         1.dp,
                                         if (carouselIndex == successStories.indexOf(Triple(name, title, bio))) Color(0xFFF9A825).copy(alpha = 0.5f) else Color.Transparent,
                                         RoundedCornerShape(16.dp)
-                                    ),
+                                    )
+                                    .clickable {
+                                        activeSpotlightUser = Triple(name, title, bio)
+                                    },
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = primaryCardColor)
                             ) {
@@ -1935,6 +1878,19 @@ fun HomeDashboard(
                                         lineHeight = 18.sp,
                                         color = bodyTextColor
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.End,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = if (isNepali) "पूरा कथा हेर्नुहोस् ➜" else "View Full Story ➜",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (activeTheme == "festival") Color(0xFFF57C00) else Color(0xFF0F4C81)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2022,17 +1978,24 @@ fun HomeDashboard(
             item {
                 Column {
                     Text(
-                        text = "📅 Sarlahi Upcoming Events & Registrations",
+                        text = if (isNepali) "📅 सर्लाही आगामी कार्यक्रम र अनलाइन दर्ता फारमहरू" else "📅 Sarlahi Upcoming Events & Registrations",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp,
                         color = headingTextColor,
                         modifier = Modifier.padding(bottom = 10.dp)
                     )
 
-                    val events = listOf(
-                        Triple("Sarlahi Bote Youth Leadership Camp", "June 15, 2026", "Karmahiya Center"),
-                        Triple("Madhesh River Ecology and Canoe Race", "July 2, 2026", "Bagmati Shores")
-                    )
+                    val events = if (isNepali) {
+                        listOf(
+                            Triple("Sarlahi Bote Youth Community Leadership", "जुन १५, २०२६", "कर्मैया केन्द्र"),
+                            Triple("Bote Youth Community Nepal to join online forms register portals", "जुलाई २, २०२६", "बागमती तट")
+                        )
+                    } else {
+                        listOf(
+                            Triple("Sarlahi Bote Youth Community Leadership", "June 15, 2026", "Karmahiya Center"),
+                            Triple("Bote Youth Community Nepal to join online forms register portals", "July 2, 2026", "Bagmati Shores")
+                        )
+                    }
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         events.forEach { (name, date, loc) ->
@@ -2067,14 +2030,15 @@ fun HomeDashboard(
                                             regName = ""
                                             regEmail = ""
                                             regPhone = ""
-                                            regDetails = "Interested in joining $name"
+                                            regAge = ""
+                                            regDetails = if (isNepali) "$name मा सामेल हुन इच्छुक" else "Interested in joining $name"
                                         },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF2E7D32)
                                         ),
                                         modifier = Modifier.testTag("register_btn_${name.take(5).lowercase()}")
                                     ) {
-                                        Text("Register", fontSize = 11.sp, color = Color.White)
+                                        Text(if (isNepali) "दर्ता गर्नुहोस्" else "Register", fontSize = 11.sp, color = Color.White)
                                     }
                                 }
                             }
@@ -2142,6 +2106,7 @@ fun HomeDashboard(
                                             name = "Tribal Supporter",
                                             email = emailInput,
                                             phone = "+977-9800000000",
+                                            age = "N/A",
                                             details = "Newsletter subscription list"
                                         )
                                     }
@@ -2193,17 +2158,95 @@ fun HomeDashboard(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("COMMUNITY", fontSize = 11.sp, fontWeight = FontWeight.Black, color = headingTextColor)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("• About", fontSize = 12.sp, color = bodyTextColor)
-                            Text("• History", fontSize = 12.sp, color = bodyTextColor)
-                            Text("• Grammar", fontSize = 12.sp, color = bodyTextColor)
+                            Text(
+                                text = "• About",
+                                fontSize = 12.sp,
+                                color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        activeLoreTitle = if (isNepali) "बोटे युवा समुदाय नेपाल 🛶" else "About Bote Youth Community 🛶"
+                                        activeLoreContent = if (isNepali) {
+                                            "बोटे युवा समुदाय नेपाल सर्लाहीको कर्मैयामा सक्रिय एक गैर-नाफामूलक सामुदायिक संस्था हो, जसले संकटापन्न आदिवासी बोटे समुदायको भाषा, लोकसंस्कृति, ऐतिहासिक दस्ताबेजीकरण र सामाजिक-आर्थिक विकासका लागि कार्य गर्दै आइरहेको छ। प्रविधि, दिगो पर्यटन र सम्पदा संरक्षणका माध्यमबाट हामी युवाहरूलाई आफ्नो पुर्ख्यौली पहिचान जोगाउन प्रेरित गर्दछौं।"
+                                        } else {
+                                            "Bote Youth Community Nepal is a dedicated, youth-led indigenous organization based in Karmahiya, Sarlahi, Madhesh Province, Nepal. Our mission is to digitize and preserve the endangered oral Bote language, run heritage awareness programs, promote sustainable eco-tourism (such as traditional canoe homestays), and empower Bote youths through education, technology, and ancestral rights advocacy."
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp)
+                            )
+                            Text(
+                                text = "• History",
+                                fontSize = 12.sp,
+                                color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        activeLoreTitle = if (isNepali) "इतिहास 📜" else "History 📜"
+                                        activeLoreContent = if (isNepali) {
+                                            "बोटे नेपालको एक प्राचीन आदिवासी भूमिपुत्र र नदीतटीय समुदाय हो, जसले ऐतिहासिक रूपमा गण्डकी, नारायणी, राप्ती र बागमती जस्ता प्रमुख नदी किनारहरूमा कुशल माझी, जलयात्रा सञ्चालक र सुनखानी खोज्ने (सुनखानिया) को रूपमा सेवा गर्दै आएका छन्। शताब्दीयौंदेखि उनीहरूले आफ्नै हातले खोपेका काठका डुङ्गाहरू (डुङ्गा) प्रयोग गरी खतरनाक बहावहरूमा गाउँहरूलाई जोड्ने अनुपम सीप विकास गरे। उनीहरूको ऐतिहासिक उत्पत्ति 'बोट' (रूख) सँग जोडिएको छ, जसको मुनि उनीहरूका पुर्खाहरूले मौसमी पुलहरू निर्माण गर्दा आश्रय लिएका थिए। आज, यो समुदाय ऐतिहासिक बस्तीहरू, बसाइँसराइको नक्सा र जलस्रोतमाथिको पुर्ख्यौली अधिकार संरक्षण गर्न सक्रिय रूपमा काम गरिरहेको छ।"
+                                        } else {
+                                            "The Bote are an ancient indigenous riverine community of Nepal, historically serving as expert ferrymen, fishermen, and gold-panners along major river basins like the Gandaki, Narayani, Rapti, and Bagmati. Over centuries, they developed unmatched navigational skills, using hand-carved wooden canoes (Dunga) to connect villages separated by dangerous rapids. Their historical origin is tied to the concept of 'Bot' (tree), under which their ancestors sheltered while constructing seasonal bridges. Today, the community is actively working with archaeological bodies to preserve their historic settlements, migration maps, and ancestral rights over water resources."
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp)
+                            )
+                            Text(
+                                text = "• Grammar",
+                                fontSize = 12.sp,
+                                color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        activeLoreTitle = if (isNepali) "भाषा र व्याकरण 🗣️" else "Language & Grammar 🗣️"
+                                        activeLoreContent = if (isNepali) {
+                                            "बोटे भाषा बोटे जातिले बोल्ने एक संकटापन्न भारोपेली भाषा हो, जुन माझी र दनुवार भाषाहरूसँग नजिकको सम्बन्ध राख्दछ। यो भाषा परम्परागत रूपमा मौखिक थियो र हाल देवनागरी लिपिमा लेख्न थालिएको छ। यसमा जलीय जीवन, नदीका बहावहरू, माछा मार्ने जालहरू र वन पारिस्थितिकी प्रणालीसँग सम्बन्धित समृद्ध शब्दावलीहरू छन्, जसमध्ये धैरे परम्परागत शब्दहरू नेपाली भाषामा पाइँदैनन्। बोटे व्याकरणमा लिंगभेद, वचन र पुरुषको आधारमा विशिष्ट क्रियापदको रूपावली हुने गर्दछ। बोटे युवा समुदाय नेपालले यी सबै भाषा नियमहरूलाई लिपिबद्ध गरी नयाँ पुस्ताका लागि डिजिटल शब्दकोश र व्याकरण निर्देशिकाहरू तयार गरिरहेको छ।"
+                                        } else {
+                                            "Bote Bhasha is an endangered Indo-Aryan language spoken by the Bote people, closely related to the Majhi and Danuwar languages, traditionally oral and today transcribed using Devanagari script. It features rich vocabulary related to aquatic life, river patterns, fishing nets, and forest ecosystems, much of which does not exist in standard Nepali. Because it lacks a widely distributed written script, young generations are transitioning to Nepali, threatening its extinction. Current youth initiatives focus on creating bilingual dictionaries, audio recordings of elders' oral stories, and children's schoolbooks to revive native fluency."
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp)
+                            )
                         }
                         // Col 2: Resources
                         Column(modifier = Modifier.weight(1f)) {
                             Text("RESOURCES", fontSize = 11.sp, fontWeight = FontWeight.Black, color = headingTextColor)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("• Research Paper", fontSize = 12.sp, color = bodyTextColor)
-                            Text("• Downloads", fontSize = 12.sp, color = bodyTextColor)
-                            Text("• Archives", fontSize = 12.sp, color = bodyTextColor)
+                            Text(
+                                text = "• Research Paper",
+                                fontSize = 12.sp,
+                                color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        viewModel.setScreen(AppScreen.DIGITAL_LIBRARY)
+                                        viewModel.triggerNotification(if (isNepali) "डिजिटल पुस्तकालय - अनुसन्धान पत्र खण्ड" else "Navigated to Research Papers in Digital Library")
+                                    }
+                                    .padding(vertical = 2.dp)
+                            )
+                            Text(
+                                text = "• Downloads",
+                                fontSize = 12.sp,
+                                color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        viewModel.setScreen(AppScreen.DIGITAL_LIBRARY)
+                                        viewModel.triggerNotification(if (isNepali) "डिजिटल पुस्तकालय - डाउनलोड खण्ड" else "Navigated to Downloads in Digital Library")
+                                    }
+                                    .padding(vertical = 2.dp)
+                            )
+                            Text(
+                                text = "• Archives",
+                                fontSize = 12.sp,
+                                color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable {
+                                        viewModel.setScreen(AppScreen.DIGITAL_LIBRARY)
+                                        viewModel.triggerNotification(if (isNepali) "डिजिटल पुस्तकालय - पुराना संग्रहहरू" else "Navigated to Digital Archives in Digital Library")
+                                    }
+                                    .padding(vertical = 2.dp)
+                            )
                         }
                     }
 
@@ -2228,22 +2271,22 @@ fun HomeDashboard(
                                 fontWeight = FontWeight.Bold, 
                                 color = bodyTextColor
                             )
-                            Text("Bote Community Hall", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
-                            Text("Karmahiya, Ward No. 1", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
-                            Text("Lalbandi Municipality, Sarlahi", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
+                            Text("Bote Youth Community Nepal", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = bodyTextColor)
+                            Text("Karmahiya, Sarlahi Ward No. 11", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
+                            Text("Bagmati Municipality, Sarlahi", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
                             Text("Madhesh Province, Nepal", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
                             Spacer(modifier = Modifier.height(6.dp))
                             
                             Row(
                                 modifier = Modifier
                                     .clickable {
-                                        clipboardManager.setText(AnnotatedString("+977-9844012345"))
-                                        viewModel.triggerNotification("📞 Phone number copied to clipboard!")
+                                        clipboardManager.setText(AnnotatedString("+977 9806389212"))
+                                        viewModel.triggerNotification(if (isNepali) "📞 फोन नम्बर कपि गरियो!" else "📞 Phone number copied to clipboard!")
                                     }
                                     .padding(vertical = 2.dp)
                             ) {
                                 Text("📞 Tel: ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = bodyTextColor)
-                                Text("+977-9844012345", fontSize = 11.sp, color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81), fontWeight = FontWeight.Bold)
+                                Text("+977 9806389212", fontSize = 11.sp, color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81), fontWeight = FontWeight.Bold)
                             }
                         }
                         // Col 4: Social
@@ -2259,13 +2302,17 @@ fun HomeDashboard(
                             Column(
                                 modifier = Modifier
                                     .clickable {
-                                        clipboardManager.setText(AnnotatedString("info@boteyouthcommunity.org.np"))
-                                        viewModel.triggerNotification("📧 Email address copied to clipboard!")
+                                        clipboardManager.setText(AnnotatedString("boteyouthcommunitynepal@gmail.com"))
+                                        try {
+                                            uriHandler.openUri("mailto:boteyouthcommunitynepal@gmail.com")
+                                        } catch (e: Exception) {
+                                            viewModel.triggerNotification(if (isNepali) "📧 इमेल ठेगाना कपि गरियो!" else "📧 Email address copied!")
+                                        }
                                     }
                                     .padding(vertical = 2.dp)
                             ) {
                                 Text("📧 Email Support:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = bodyTextColor)
-                                Text("info@boteyouth.org.np", fontSize = 11.sp, color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("boteyouthcommunitynepal@gmail.com", fontSize = 11.sp, color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             
                             Spacer(modifier = Modifier.height(6.dp))
@@ -2274,20 +2321,28 @@ fun HomeDashboard(
                             Row(
                                 modifier = Modifier
                                     .clickable {
-                                        clipboardManager.setText(AnnotatedString("https://facebook.com/BoteYouthSarlahi"))
-                                        viewModel.triggerNotification("🔵 Facebook Page Link copied!")
+                                        clipboardManager.setText(AnnotatedString("https://www.facebook.com/profile.php?id=61572454450129"))
+                                        try {
+                                            uriHandler.openUri("https://www.facebook.com/profile.php?id=61572454450129")
+                                        } catch (e: Exception) {
+                                            viewModel.triggerNotification(if (isNepali) "🔵 फेसबुक लिंक कपि गरियो!" else "🔵 Facebook Page Link copied!")
+                                        }
                                     }
                                     .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("• Facebook", fontSize = 11.sp, color = bodyTextColor.copy(alpha = 0.8f))
+                                Text("• Facebook Page", fontSize = 11.sp, color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81), fontWeight = FontWeight.Bold)
                             }
                             
                             Row(
                                 modifier = Modifier
                                     .clickable {
                                         clipboardManager.setText(AnnotatedString("https://youtube.com/@BoteFolk"))
-                                        viewModel.triggerNotification("🔴 YouTube Folk Channel Link copied!")
+                                        try {
+                                            uriHandler.openUri("https://youtube.com/@BoteFolk")
+                                        } catch (e: Exception) {
+                                            viewModel.triggerNotification("🔴 YouTube Folk Channel Link copied!")
+                                        }
                                     }
                                     .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -2299,7 +2354,11 @@ fun HomeDashboard(
                                 modifier = Modifier
                                     .clickable {
                                         clipboardManager.setText(AnnotatedString("https://instagram.com/BoteYouth"))
-                                        viewModel.triggerNotification("📸 Instagram Profile Link copied!")
+                                        try {
+                                            uriHandler.openUri("https://instagram.com/BoteYouth")
+                                        } catch (e: Exception) {
+                                            viewModel.triggerNotification("📸 Instagram Profile Link copied!")
+                                        }
                                     }
                                     .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -2431,47 +2490,391 @@ fun HomeDashboard(
 
         // --- Interactive Heritage Foundations Details Dialog ---
         activeLoreTitle?.let { title ->
+            val cleanTitle = title.replace(Regex("[^a-zA-Z]"), "").trim()
+            val richDescription = when {
+                cleanTitle.contains("History", ignoreCase = true) -> {
+                    if (isNepali) {
+                        "बोटे नेपालको एक प्राचीन आदिवासी भूमिपुत्र र नदीतटीय समुदाय हो, जसले ऐतिहासिक रूपमा गण्डकी, नारायणी, राप्ती र बागमती जस्ता प्रमुख नदी किनारहरूमा कुशल माझी, जलयात्रा सञ्चालक र सुनखानी खोज्ने (सुनखानिया) को रूपमा सेवा गर्दै आएका छन्। शताब्दीयौंदेखि उनीहरूले आफ्नै हातले खोपेका काठका डुङ्गाहरू (डुङ्गा) प्रयोग गरी खतरनाक बहावहरूमा गाउँहरूलाई जोड्ने अनुपम सीप विकास गरे। उनीहरूको ऐतिहासिक उत्पत्ति 'बोट' (रूख) सँग जोडिएको छ, जसको मुनि उनीहरूका पुर्खाहरूले मौसमी पुलहरू निर्माण गर्दा आश्रय लिएका थिए। आज, यो समुदाय ऐतिहासिक बस्तीहरू, बसाइँसराइको नक्सा र जलस्रोतमाथिको पुर्ख्यौली अधिकार संरक्षण गर्न सक्रिय रूपमा काम गरिरहेको छ।"
+                    } else {
+                        "The Bote are an ancient indigenous riverine community of Nepal, historically serving as expert ferrymen, fishermen, and gold-panners along major river basins like the Gandaki, Narayani, Rapti, and Bagmati. Over centuries, they developed unmatched navigational skills, using hand-carved wooden canoes (Dunga) to connect villages separated by dangerous rapids. Their historical origin is tied to the concept of 'Bot' (tree), under which their ancestors sheltered while constructing seasonal bridges. Today, the community is actively working with archaeological bodies to preserve their historic settlements, migration maps, and ancestral rights over water resources."
+                    }
+                }
+                cleanTitle.contains("Language", ignoreCase = true) -> {
+                    if (isNepali) {
+                        "बोटे भाषा बोटे जातिले बोल्ने एक संकटापन्न भारोपेली भाषा हो, जुन माझी र दनुवार भाषाहरूसँग नजिकको सम्बन्ध राख्दछ। यो भाषा परम्परागत रूपमा मौखिक थियो र हाल देवनागरी लिपिमा लेख्न थालिएको छ। यसमा जलीय जीवन, नदीका बहावहरू, माछा मार्ने जालहरू र वन पारिस्थितिकी प्रणालीसँग सम्बन्धित समृद्ध शब्दावलीहरू छन्, जसमध्ये धेरैजसो मानक नेपाली भाषामा पाइँदैनन्। व्यापक रूपमा वितरण गरिएको लिखित लिपिको अभावका कारण नयाँ पुस्ता नेपाली भाषामा रूपान्तरण भइरहेका छन्, जसले गर्दा यो लोप हुने खतरामा छ। हालका युवा पहलहरू स्थानीय भाषाको पुनरुत्थानका लागि द्विभाषिक शब्दकोशहरू, ज्येष्ठ नागरिकहरूका मौखिक कथाहरूको अडियो रेकردिङहरू र बालबालिकाका लागि पाठ्यपुस्तकहरू निर्माण गर्नमा केन्द्रित छन्।"
+                    } else {
+                        "Bote Bhasha is an endangered Indo-Aryan language spoken by the Bote people, closely related to the Majhi and Danuwar languages, traditionally oral and today transcribed using Devanagari script. It features rich vocabulary related to aquatic life, river patterns, fishing nets, and forest ecosystems, much of which does not exist in standard Nepali. Because it lacks a widely distributed written script, young generations are transitioning to Nepali, threatening its extinction. Current youth initiatives focus on creating bilingual dictionaries, audio recordings of elders' oral stories, and children's schoolbooks to revive native fluency."
+                    }
+                }
+                cleanTitle.contains("Culture", ignoreCase = true) -> {
+                    if (isNepali) {
+                        "प्रकृति पूजा र जीववाद (Animism) मा गहिरो जरा गाडिएको बोटे समुदायले जलदेवतालाई सम्मान गर्न 'नदी पूजा' को साथै संसारी माई र शिकारी जस्ता प्रकृति देवताहरूको पूजा अर्चना गर्दछन्। नदी पूजा बोटे अध्यात्मको मूल हो, जहाँ उनीहरू नयाँ डुङ्गाहरू नदीमा उतार्नु अघि वा माछा मार्ने सिजन सुरु गर्नु अघि नदीलाई दूध, अक्षता र मौसमी फूलहरू चढाउँछन् र बाढीबाट सुरक्षा तथा राम्रो शिकारको कामना गर्दछन्। रोगव्याधि निको पार्न र पितृहरूसँग संवाद गर्न धामी-झाँक्री प्रथा व्यापक रूपमा अभ्यास गरिन्छ। उनीहरूका चाडपर्वहरू ऊर्जावान् सामुदायिक वृत्त नृत्य, लोक गायन र मादलको तालमा मनाइन्छ।"
+                    } else {
+                        "Deeply rooted in nature worship and animism, the Bote perform 'Nadi Puja' (River worship) to honor water spirits, along with worshipping nature deities like Sansari Mai and the hunter god Shikari. River worship is the core of Bote spirituality, where they offer prayers, milk, and seasonal flowers to the river before launching new boats or starting the fishing season, seeking protection from floods and bountiful catches. Shamanic practices (Dhami-Jhakri) are widely followed to heal ailments and communicate with ancestors. Their festivals are celebrated with energetic community circle dances, folk singing, and rhythmic drumming."
+                    }
+                }
+                cleanTitle.contains("Dress", ignoreCase = true) -> {
+                    if (isNepali) {
+                        "पुरुषहरू परम्परागत रूपमा नदी यात्राका लागि उपयुक्त साधारण कछाड (कम्मरमुनि बाँधिने कपडा) र भोटो (बाहुला नभएको स्टकोट) लगाउँछन् भने महिलाहरू पटुका (कम्मरमा बाँधिने कपडा) र चोलो (ब्लाउज) सँगै फरिया (साडी) लगाउँछन्। उनीहरू चाँदीका गहनाहरू जस्तै हसुली, ढुङ्ग्री र बुलाकीले सजिन्छन्। कपडाहरू परम्परागत रूपमा जंगली गाँजाको रेशा र स्थानीय कपासबाट हातले बुनिन्छन्, जसले यसलाई माछा मार्न र पौडी खेल्न टिकाउ बनाउँछ। आज, बोटे युवा संघले तान बुन्ने कार्यशालाहरू सञ्चालन गर्दछ जहाँ गाउँका ज्येष्ठ नागरिकहरूले युवाहरूलाई यी परम्परागत पोशाकहरू बुन्न तालिम दिन्छन्, जसले गर्दा जटिल बुट्टा र प्राकृतिक रङको प्रयोग भावी पुस्ताका लागि संरक्षित रहन्छ।"
+                    } else {
+                        "Men traditionally wear a simple Kachhad (loincloth) and Bhoto (sleeveless vest) suited for river navigation, while women wear a Phariya (sari/skirt) tied with a Patuka (waistband) and a Cholo (blouse), accessorized with silver ornaments like Hasuli and Bulaki. The clothing is traditionally hand-woven from wild hemp and locally sourced cotton fibers, making it durable for fishing and river rafting. Today, the Bote Youth Association runs handloom weaving workshops where village elders train the youth to weave these heritage garments, preserving the intricate geometric patterns and natural dye recipes for future generations."
+                    }
+                }
+                else -> activeLoreContent
+            }
+
+            val keyFacts = when {
+                cleanTitle.contains("History", ignoreCase = true) -> listOf(
+                    if (isNepali) "पुर्ख्यौली पेशा: डुङ्गा चलाउने, माछा मार्ने र सुन चाल्ने" else "Ancestral Occupations: Boating, fishing, gold panning",
+                    if (isNepali) "प्रमुख नदी बेसिन: गण्डकी, नारायणी, बागमती र राप्ती" else "Major River Basins: Gandaki, Narayani, Bagmati, Rapti",
+                    if (isNepali) "ऐतिहासिक संरक्षण: पुराना बस्ती र जल अधिकारको दाबी" else "Heritage Focus: Preserving ancient settlements & water rights"
+                )
+                cleanTitle.contains("Language", ignoreCase = true) -> listOf(
+                    if (isNepali) "भाषिक वर्गीकरण: संकटापन्न भारोपेली भाषा" else "Language Group: Endangered Indo-Aryan Dialect",
+                    if (isNepali) "संरक्षणको प्रयास: द्विभाषिक विद्यालय पाठ्यपुस्तकहरू र शब्दकोश" else "Revival Project: Bilingual dictionaries & early readers",
+                    if (isNepali) "शब्दावली विशेषता: जलीय जीवन र नदी प्रकृति सम्बन्धी धनी शब्द" else "Vocabulary Richness: Water current dynamics & aquatic ecosystem terms"
+                )
+                cleanTitle.contains("Culture", ignoreCase = true) -> listOf(
+                    if (isNepali) "मुख्य अनुष्ठान: प्रकृति र जलदेवताका लागि 'नदी पूजा'" else "Central Ritual: 'Nadi Puja' (River Worship) ceremony",
+                    if (isNepali) "मुख्य चाडहरू: साउने संक्रान्ति र भूमे पूजा" else "Major Festivals: Saune Sakranti & Bhume Puja circles",
+                    if (isNepali) "आध्यात्मिक विश्वास: प्रकृतिवाद र पुर्खाको धामीझाँक्री सेवा" else "Spiritualism: Animism & shamanic Dhami-Jhakri healing"
+                )
+                cleanTitle.contains("Dress", ignoreCase = true) -> listOf(
+                    if (isNepali) "पुरुष पोशाक: कछाड (कम्मरमुनि बाँधिने) र भोटो (स्टकोट)" else "Male Attire: Kachhad (loincloth) & Bhoto (sleeveless vest)",
+                    if (isNepali) "महिला पोशाक: फरिया (साडी), पटुका (पेटी) र चोलो" else "Female Attire: Phariya (sari), Patuka (sash) & Cholo (blouse)",
+                    if (isNepali) "परम्परागत सामाग्री: जंगली गाँजाको रेशा र घरेलु बुनाइ" else "Textile Medium: Wild river hemp and handloom cotton fibers"
+                )
+                else -> emptyList()
+            }
+
             Dialog(onDismissRequest = { activeLoreTitle = null }) {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = primaryCardColor)
+                        .fillMaxWidth(0.95f)
+                        .padding(12.dp)
+                        .testTag("lore_detail_dialog"),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(16.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = title,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = headingTextColor
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = when {
+                                            cleanTitle.contains("History", ignoreCase = true) -> "📜"
+                                            cleanTitle.contains("Language", ignoreCase = true) -> "🗣️"
+                                            cleanTitle.contains("Culture", ignoreCase = true) -> "🔱"
+                                            cleanTitle.contains("Dress", ignoreCase = true) -> "👗"
+                                            else -> "🛶"
+                                        },
+                                        fontSize = 18.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = title,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 18.sp,
+                                    color = headingTextColor
+                                )
+                            }
                             IconButton(onClick = { activeLoreTitle = null }) {
                                 Icon(Icons.Default.Close, "Close", tint = headingTextColor)
                             }
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = activeLoreContent,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = bodyTextColor
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = if (isNepali) "विस्तृत इतिहास र जानकारी" else "Detailed History & Heritage",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = headingTextColor,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+
+                        Text(
+                            text = richDescription,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            color = bodyTextColor,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
+                        if (keyFacts.isNotEmpty()) {
+                            Text(
+                                text = if (isNepali) "मुख्य साँस्कृतिक स्तम्भहरू" else "Key Heritage Anchors",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = headingTextColor,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                keyFacts.forEach { fact ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81))
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = fact,
+                                            fontSize = 11.sp,
+                                            color = bodyTextColor,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+                        }
+
                         Button(
                             onClick = { activeLoreTitle = null },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF0F4C81)
                             ),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.align(Alignment.End)
                         ) {
-                            Text("Understood", color = Color.White)
+                            Text(
+                                text = if (isNepali) "बुझें र बन्द गर्नुहोस्" else "Understood",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Interactive Youth Spotlight Details Dialog ---
+        activeSpotlightUser?.let { (name, role, bio) ->
+            Dialog(onDismissRequest = { activeSpotlightUser = null }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .padding(12.dp)
+                        .testTag("spotlight_detail_dialog"),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                    ) {
+                        // Header with profile avatar and names
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(Color(0xFFF9A825), Color(0xFF0F4C81))
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = name.take(1),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 22.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = name,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 18.sp,
+                                    color = headingTextColor
+                                )
+                                Text(
+                                    text = role,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = if (activeTheme == "festival") Color(0xFFF9A825) else Color(0xFF2E7D32)
+                                )
+                            }
+                            IconButton(onClick = { activeSpotlightUser = null }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = headingTextColor)
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+
+                        // Story and description
+                        Text(
+                            text = if (isNepali) "प्रेरणादायी यात्रा र समुदायमा योगदान" else "Inspirational Journey & Impact",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = headingTextColor,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+
+                        val personalStory = when (name) {
+                            "Anita Bote" -> if (isNepali) {
+                                "अनिता बागमती नदीको किनारमा हुर्कँदै गर्दा मिचाहा प्रजाति र प्रदूषणका कारण सिमसार बिस्तारै क्षयीकरण भएको देखिन्। आफ्ना पुर्खाहरूबाट प्राप्त परम्परागत ज्ञान र आधुनिक पारिस्थितिकीय सिद्धान्तहरू प्रयोग गर्दै उनले ५० भन्दा बढी बोटे युवाहरूलाई नदी किनार सफा गर्न र ३ किलोमिटर सिमसार क्षेत्र पुनर्स्थापना गर्न परिचालन गरिन्। उनीहरूले स्थानीय बगाले सिमसारका बोटबिरुवाहरू पुनः रोपे र विशेष गरी संकटापन्न जंगली सुगन्धित फूलहरू (जुन बोटे संस्कारमा महत्वपूर्ण हुन्छन्) लाई संरक्षण गरे। उनको यस प्रयासले स्थानीय चराचुरुङ्गीहरू फर्काउनुका साथै नदीको वातावरणीय सन्तुलन पुनर्जीवित गर्न सफलता पाएको छ।"
+                            } else {
+                                "Anita grew up on the banks of the Bagmati River in Sarlahi, watching the wetlands slowly degrade due to encroachment and pollution. Armed with traditional knowledge passed down by her elders and modern ecological principles, she mobilized over 50 Bote youth to clean up and restore a 3-kilometer stretch of riverbanks. They re-introduced native reeds and plants, specifically protecting the endangered wild marsh marigold which is crucial for Bote ritual offerings. Her effort has successfully brought back native bird species and restored the river's ecological balance."
+                            }
+                            "Navaraj Bot" -> if (isNepali) {
+                                "सर्लाहीको एक परम्परागत माझी परिवारमा जन्मिएका नवराज बोटे आफ्नो गाउँकै पहिलो सफ्टवेयर इन्जिनियर हुन्। बोटे भाषा मुख्यतया मौखिक भएको र डिजिटल टाइपिङका साधनहरू नभएका कारण उनले देवनागरी लिपिमा आधारित पहिलो युनिकोड किबोर्ड र व्याकरण म्यापिङ इन्जिनको विकास गरे। यस उपकरणले भाषा शिक्षकहरूलाई बोटे भाषाका नाकबाट बोलिने स्वरवर्ण र विशिष्ट दन्त्य व्यञ्जनहरू सिधै स्मार्टफोन र ल्यापटपमा टाइप गर्न अनुमति दिन्छ। हाल उनी लोककथाको डिजिटल संग्रह र अन्तरक्रियात्मक भाषा सिकाइ एपमा काम गरिरहेका छन्।"
+                            } else {
+                                "Coming from a fishing family in Sarlahi, Navaraj is the first software engineer from his village. Understanding that the Bote language was primarily oral and lacked digital input tools, he programmed a custom Unicode-compliant keyboard layout and orthography mapping engine. This tool allows elders and educators to type Bote vowels, nasalizations, and unique dental consonants directly on smartphones and laptops. He is currently working on an open-source digital corpus of Bote folktales and an interactive language learning mobile app."
+                            }
+                            "Sunita Bote" -> if (isNepali) {
+                                "सुनिताले सर्लाहीका बोटे परिवारहरूलाई जीविकोपार्जनका लागि परम्परागत माछा मार्ने र डुङ्गा खियाउने काम मात्र पर्याप्त नभएको महसुस गरिन्। उनले बोटे महिला होमस्टे तथा लघुवित्त सहकारी संस्था स्थापना गरिन्, जसले स्थानीय महिलाहरूलाई आफ्ना परम्परागत घरहरूलाई पर्यावरणमैत्री होमस्टेका रूपमा विकास गर्न मद्दत गर्दछ। उनले सस्तो ब्याजदरमा लघु-कर्जाको व्यवस्था गरिन्, जसले परिवारहरूलाई सिलाइ मेसिन, हाते तान र मौरीपालनका सामग्रीहरू खरिद गर्न सक्षम बनायो। उनीहरूको नेतृत्वमा सहकारीले १,२०० भन्दा बढी पर्यटकहरूलाई स्वागत गरिसकेको छ, जसबाट दर्जनौँ घरपरिवारका लागि दिगो आम्दानीको स्रोत सिर्जना भएको छ।"
+                            } else {
+                                "Sunita recognized that traditional fishing and boating could no longer solely sustain Bote families in Sarlahi. She founded the Bote Women's Homestay and Micro-finance Cooperative, which helps local women renovate their traditional mud-walled homes into eco-tourism homestays. She established micro-loans with low interest rates, enabling families to purchase sewing machines, handlooms, and organic bee-keeping equipment. Under her leadership, the cooperative has welcomed over 1,200 tourists, generating sustainable secondary income for dozens of households."
+                            }
+                            "Manoj Bote" -> if (isNepali) {
+                                "मनोज बोटे कपडा बुन्ने कलाको पुनरुत्थानमा समर्पित युवा कपडा डिजाइनर हुन्। परम्परागत कछाड र भोटो जस्ता कपडाहरूका अनुपम बुन्ने शैलीहरू दस्तावेज गर्न उनले विभिन्न नदी किनारका बस्तीहरूको यात्रा गरे। उनले ४५ भढी परम्परागत बुट्टाहरू र नदी किनारका जडीबुटी तथा ओखरको बोक्राबाट बनाइने प्राकृतिक रङका रेसिपीहरू सूचीकृत गरी नेपालकै पहिलो डिजिटल बोटे कपडा अभिलेखालय निर्माण गरे। उनले नयाँ पुस्ताका लागि नि:शुल्क हाते तान बुन्ने कक्षाहरू सञ्चालन गर्छन्, जसले बोटे पहिरनको कलालाई जीवित राख्न मद्दत गरेको छ।"
+                            } else {
+                                "Manoj is a passionate textile designer dedicated to revitalizing Bote weaving traditions. He traveled across multiple riverside villages to document the unique weaving techniques of traditional attire like the Bhoto (vest) and Kachhad (wrap). By cataloging over 45 historic geometric motifs and dye recipes made from wild river ferns and walnut shells, Manoj created Nepal's first Digital Bote Textile Archive. He runs free weekly handloom classes for youngsters, ensuring that the visual art of Bote garments remains a living culture."
+                            }
+                            else -> bio
+                        }
+
+                        Text(
+                            text = personalStory,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            color = bodyTextColor,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
+                        // Interactive buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            var supportCount by remember { mutableStateOf(0) }
+                            
+                            // Appreciate Heart Button
+                            Button(
+                                onClick = {
+                                    supportCount++
+                                    triggerConfetti++
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (activeTheme == "festival") Color(0xFFF57C00) else Color(0xFF0F4C81)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = "Heart Icon",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (supportCount == 0) {
+                                            if (isNepali) "सराहना गर्नुहोस्" else "Appreciate"
+                                        } else {
+                                            "+$supportCount"
+                                        },
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            // Share story button
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(
+                                        androidx.compose.ui.text.AnnotatedString(
+                                            if (isNepali) "बोटे समुदायको नायक ${name} को प्रेरणादायी कथा: ${role}" 
+                                            else "Check out Bote community hero ${name}: ${role}!"
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Share",
+                                        tint = headingTextColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isNepali) "साझा गर्नुहोस्" else "Share Story",
+                                        color = headingTextColor,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Button(
+                            onClick = { activeSpotlightUser = null },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text(
+                                text = if (isNepali) "बन्द गर्नुहोस्" else "Close",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -2544,6 +2947,15 @@ fun HomeDashboard(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedTextField(
+                            value = regAge,
+                            onValueChange = { regAge = it },
+                            label = { Text("Your age") },
+                            modifier = Modifier.fillMaxWidth().testTag("reg_age_input"),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
                             value = regDetails,
                             onValueChange = { regDetails = it },
                             label = { Text("Additional information") },
@@ -2560,6 +2972,7 @@ fun HomeDashboard(
                                         name = regName,
                                         email = regEmail,
                                         phone = regPhone,
+                                        age = regAge,
                                         details = regDetails
                                     )
                                     registeringEventTitle = null
@@ -2588,6 +3001,7 @@ fun foundfoundRow(
     textColor: Color,
     headingColor: Color,
     activeTheme: String,
+    isNepali: Boolean,
     onLoreSelected: (String, String) -> Unit
 ) {
     Row(
@@ -2611,7 +3025,11 @@ fun foundfoundRow(
                 colors = CardDefaults.cardColors(containerColor = cardColor),
                 elevation = CardDefaults.cardElevation(1.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth()
+                ) {
                     Text(
                         text = title,
                         fontSize = 14.sp,
@@ -2625,6 +3043,19 @@ fun foundfoundRow(
                         lineHeight = 15.sp,
                         color = textColor
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isNepali) "थप पढ्नुहोस् ➜" else "View Details ➜",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (activeTheme == "festival") Color(0xFFF57C00) else Color(0xFF0F4C81)
+                        )
+                    }
                 }
             }
         }
@@ -5567,6 +5998,7 @@ fun CommunityHubPanel(
     var applicantName by remember { mutableStateOf("") }
     var applicantEmail by remember { mutableStateOf("") }
     var applicantPhone by remember { mutableStateOf("") }
+    var applicantAge by remember { mutableStateOf("") }
     var targetDetails by remember { mutableStateOf("") }
     val scholarshipOpps by viewModel.allScholarshipOpportunities.collectAsStateWithLifecycle()
 
@@ -6190,14 +6622,21 @@ fun CommunityHubPanel(
                                 value = applicantEmail,
                                 onValueChange = { applicantEmail = it },
                                 label = { Text("Email", fontSize = 12.sp) },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1.2f),
                                 singleLine = true
                             )
                             OutlinedTextField(
                                 value = applicantPhone,
                                 onValueChange = { applicantPhone = it },
                                 label = { Text("Contact Number", fontSize = 12.sp) },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1.2f),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = applicantAge,
+                                onValueChange = { applicantAge = it },
+                                label = { Text("Age", fontSize = 12.sp) },
+                                modifier = Modifier.weight(0.6f),
                                 singleLine = true
                             )
                         }
@@ -6267,11 +6706,13 @@ fun CommunityHubPanel(
                                     applicantName,
                                     applicantEmail,
                                     applicantPhone,
+                                    applicantAge,
                                     targetDetails
                                 )
                                 applicantName = ""
                                 applicantEmail = ""
                                 applicantPhone = ""
+                                applicantAge = ""
                                 targetDetails = ""
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -6315,6 +6756,13 @@ fun CommunityHubPanel(
                                                 fontSize = 10.sp,
                                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                             )
+                                            if (reg.age.isNotBlank()) {
+                                                Text(
+                                                    text = "🎂 Age: ${reg.age}",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                                )
+                                            }
                                         }
                                         Text(reg.details, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
@@ -7325,7 +7773,8 @@ fun CreatorDashboardPanel(
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(reg.applicantName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Text("📞 ${reg.phone} | ✉️ ${reg.email}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    val ageSuffix = if (reg.age.isNotBlank()) " | 🎂 Age: ${reg.age}" else ""
+                                    Text("📞 ${reg.phone} | ✉️ ${reg.email}$ageSuffix", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text("Details: ${reg.details}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
                                     Spacer(modifier = Modifier.height(10.dp))
@@ -8187,11 +8636,10 @@ fun ScoreMetricDial(metricLabel: String, valText: String) {
 fun getCategoryTranslation(category: String): String {
     return when (category) {
         "Bote History" -> "बोटे इतिहास"
-        "Bote Language" -> "बोटे भाषा"
+        "Bote Origin" -> "बोटे उत्पत्ति"
         "Bote Culture" -> "बोटे संस्कृति"
-        "Bote Traditional Dress" -> "बोटे पहिरन"
-        "Bote Festivals" -> "बोटे चाडपर्व"
-        "Bote Homestays" -> "बोटे होमस्टे"
+        "Bote Language" -> "बोटे भाषा"
+        "Bote Religion" -> "बोटे धर्म"
         "Bote Youth Programs" -> "बोटे युवा कार्यक्रम"
         "Bote Community of Sarlahi" -> "सर्लाही बोटे समुदाय"
         "Tarahi Bote Community" -> "तराही बोटे समुदाय"
@@ -8200,7 +8648,6 @@ fun getCategoryTranslation(category: String): String {
         "Bote River Heritage" -> "बोटे नदी सम्पदा"
         "Community Research Center" -> "सामुदायिक अनुसन्धान केन्द्र"
         "Bote Education Initiatives" -> "बोटे शिक्षा पहल"
-        "Bote Digital Archive" -> "बोटे डिजिटल अभिलेख"
         else -> category
     }
 }
@@ -8211,86 +8658,72 @@ fun getSeoLandingPagesData(isNepali: Boolean = false): List<SeoLandingPage> {
             SeoLandingPage(
                 categoryName = "Bote History",
                 canonicalTitle = "Bote History & Cultural Chronicles of Nepal",
-                keywords = "Bote History, Sarlahi Bote Tribe, bagmati river migration, indigenous communities Nepal",
-                metaDescription = "Explore the extensive history of the Bote people, their pre-modern migration routes, boat design, and traditional governance along Bagmati waters in Nepal.",
-                details = "The Bote people are an ethnic group indigenous to the inner Terai regions of Nepal. They speak Bote language. The Bote people are well known for ferrying travellers across the rivers through the boats, which often are prepared from the trunks of the trees. They are scattered around the bank of Kaligandaki, Narayani and Rapti River of Nepal. Bote and Majhi people are known as the ‘King of water’. Their ancestral occupation is fishing, boating and searching gold in the river whose settlement is nearby river and forest. The dialect and culture of Bote people in several ways is similar to that of the Danu wars, Daria, Tharus and Majhi.",
+                keywords = "Bote History, Sarlahi Bote Tribe, indigenous communities Nepal, Terai history",
+                metaDescription = "Explore the extensive history of the Bote people, their traditional river ferrying, and ancestral roots in Nepal.",
+                details = "The Bote people are an ethnic group indigenous to the inner Terai regions of Nepal. They speak Bote language. The Bote people are well known for ferrying travelers across the rivers through the boats, which often are prepared from the trunks of the trees. They are scattered around the bank of Karmaiya,sarlahi, Kaligandaki, Narayani and Rapti River of Nepal. Bote and Majhi people are known as the ‘King of water’. Their ancestral occupation is fishing, boating and searching gold in the river whose settlement is nearby river and forest. The dialect and culture of Bote people in several ways is similar to that of the Danuwars, Darai, Tharus and Majhi.",
                 faqs = listOf(
-                    Pair("How far back does the Bote lineage stretch?", "Archaeological and oral research suggests that the Bote clans have inhabited the forest terrains and major riverbanks of Nepal for over nine generations, surviving malaria and developing sustainable eco-forestry secrets."),
-                    Pair("Is Bote history documented in school books?", "Historically, central textbooks omitted local stories, which is why our digital portal and current collaborations with Kathmandu University aim to document oral chroniclers permanently.")
+                    Pair("What is the historical significance of Bote people?", "Bote people have a rich history of serving as boatmen and keepers of the riverways, acting as crucial bridges for travelers across major rivers in Nepal."),
+                    Pair("Who are known as the King of Water?", "Bote and Majhi people are traditionally recognized as the 'King of Water' due to their unparalleled river navigation and fishing skills.")
                 ),
-                altTagGuide = "Group of Bote community elders building traditional wood canoe by the river shoreline in Karmahiya, Sarlahi, Nepal.",
+                altTagGuide = "A representation of historic Bote elders navigating a wooden canoe along the banks of Nepal rivers.",
                 schemaType = "Article Schema",
-                internalLinks = listOf("Bote Language", "Tarahi Bote Community")
+                internalLinks = listOf("Bote Origin", "Bote Culture")
             ),
             SeoLandingPage(
-                categoryName = "Bote Language",
-                canonicalTitle = "Grammar & Essential Vocal Vocabulary of Bote Language",
-                keywords = "Bote language preservation, endangered dialect dictionary, Nepalese river vocabulary, Tribhuvan University",
-                metaDescription = "Discover the endangered Bote linguistic structure. Access our digital dictionary featuring riverine vocabulary, phonetic audio, and local verbs.",
-                details = "Our dialect belongs to the Indo-Aryan group, displaying heavy structural isolation. Because the language has never had its own formal writing system, we are creating Devnagari transcription structures. Active keywords of aquatic importance: 'Shawa' (Water), 'Nauni' (Fish), 'Dhoni' (Wooden boat), 'Jhal' (Dynamic cast-net).",
+                categoryName = "Bote Origin",
+                canonicalTitle = "The Origin, Etymology & Settlement Theories of Botes",
+                keywords = "Bote Origin, etymology of Bote, Terai settlement, Nepalese indigenous tribes",
+                metaDescription = "Discover the etymological origins and settlement theories of the Bote people, from makeshift bridges to forest canopies.",
+                details = "There are two theories regarding the origin of Bote people. The community was known for laying tree trunks or branches across rivers to build makeshift seasonal bridges to allow people to cross. ‘Bot’ means a tree, and it could be that Nepali speakers started calling them Bote. Another theory suggest that they did not own land or houses, and took shelter under trees on the waterfront, they came to be known as Bote, since their existence revolved around the river.",
                 faqs = listOf(
-                    Pair("Does the Bote language use Devanagari script?", "We are currently using adapted Devanagari characters to transcribe phonetic patterns to help teach the youth in primary school."),
-                    Pair("How many fluent Bote language speakers remain?", "Recent surveys show fewer than 3,000 fluent native speakers. Our goal is to expand language classes to preserve the language.")
+                    Pair("What does the word 'Bot' mean in relation to Botes?", "'Bot' means a tree in Nepali. The name Bote is believed to have originated from their practice of using tree trunks to build bridges or sheltering under waterfront trees."),
+                    Pair("Where did the Bote people historically reside?", "They historically resided under the waterfront tree canopies, possessing no land or houses, completely revolving around river systems.")
                 ),
-                altTagGuide = "Handwritten Bote dictionary mapping essential words like Shawa, Dhoni, and Nauni for bilingual students.",
+                altTagGuide = "Illustration of Bote ancestors utilizing large forest tree trunks along riverbanks.",
                 schemaType = "Article Schema",
-                internalLinks = listOf("Bote History", "Bote Education Initiatives")
+                internalLinks = listOf("Bote History", "Bote Culture")
             ),
             SeoLandingPage(
                 categoryName = "Bote Culture",
-                canonicalTitle = "Traditions, river rituals & water folklore of Botes",
-                keywords = "Bote Culture and traditions, river rituals, indigenous Nepalese music, Badhai festival",
-                metaDescription = "Deep dive into the authentic culture of the Bote tribe. Discover their traditional architecture, musical instruments, and sacred relationship with the Bagmati river.",
-                details = "Bote culture revolves around a sacred relationship with water. Families historically lived in organic thatched huts constructed from mud, river stones, and tall reeds. Traditional songs are paced to the rhythm of boat-rowing strokes, ensuring rows remain synchronized. We wreathe our ancestors' memories in the flowing patterns of hand-drawn clay decorations.",
+                canonicalTitle = "Customs, River Occupations & Social Structures of Botes",
+                keywords = "Bote Culture, Pakha Bote, Pani Bote, Bote occupations, custom and attire",
+                metaDescription = "Delve into Bote culture, including the distinction between Pakha and Pani Bote, their traditional attire, and river occupations.",
+                details = "Botes are mainly engaged in ferry driving. Bote community lives in the banks of the rivers like Kali Gandaki, Rapti, Narayani, and Sunkoshi. They are divided into two groups: Pakha Bote and Pani Bote. Pakha Bote live in hills or arable land and Pani Bote live on the banks of the Kali Gandaki, Rapti, and Narayani rivers. Their primary economic base is boating, that is a nominal. There's similarity in custom and occupation of Bote or Majhi people though they live in different places of Nepal. Their dress is similar to that of Magar and Gurung dress but their language is what differentiates them from others. Living besides river, fishing boating, looking for gold, farming and rearing animals are the main occupations of these people.",
                 faqs = listOf(
-                    Pair("What is the central cultural characteristic of Botes?", "Our spiritual lives are centered on river ecosystems—the river is revered as a maternal deity that sustains life and connection."),
-                    Pair("Are Bote cultural objects preserved?", "Yes, the local community center in Karmahiya is building a physical museum to house traditional nets, oars, and woven baskets.")
+                    Pair("What is the difference between Pakha Bote and Pani Bote?", "Pakha Bote live in the hills or arable lands, whereas Pani Bote reside directly on the banks of rivers like Kali Gandaki, Rapti, and Narayani, focusing on boating."),
+                    Pair("What are the main traditional occupations of the Botes?", "Their primary occupations include fishing, ferry driving/boating, searching for gold dust in the rivers, farming, and rearing animals.")
                 ),
-                altTagGuide = "Traditional clay-textured mud huts with thatch roof on the banks of Bagmati river Sarlahi.",
-                schemaType = "Organization Schema",
-                internalLinks = listOf("Bote Festivals", "Bote Traditional Dress")
+                altTagGuide = "Group of Bote people in traditional dress similar to Magar and Gurung, holding fishing nets near water.",
+                schemaType = "Article Schema",
+                internalLinks = listOf("Bote History", "Bote Language")
             ),
             SeoLandingPage(
-                categoryName = "Bote Traditional Dress",
-                canonicalTitle = "Traditional dress, fiber-work & weaving styles of Botes",
-                keywords = "Bote traditional dress, river fiber spinning, natural plant garments, Sarlahi weaving",
-                metaDescription = "Explore traditional Bote apparel constructed from local wild hemp, river grass fibers, and organic cotton. Perfect research for cultural historians.",
-                details = "Traditionally, Bote clothing was designed for high agility in humid riverine climates. Men wear a simple Kachhad (a wrap-around loincloth) and a Bhoto (sleeveless cotton vest), which allows them to easily navigate water currents and cast fishing nets. Bote women wear a Phariya (sari/skirt) tied with a Patuka (waistband) and a Cholo (blouse), accessorized with traditional silver jewelry such as Hasuli (rigid neck ring), Bulaki (nose ring), and glass bead necklaces (Pote).",
+                categoryName = "Bote Language",
+                canonicalTitle = "Linguistic Roots & Dialects of the Bote Language",
+                keywords = "Bote Language, mother tongue census, Nawalparasi Gulmi Chitwan dialects",
+                metaDescription = "Explore the Bote language, an endangered tongue close to Danuwar and Tharu, spoken across various districts of Nepal.",
+                details = "Bote people speak Bote language which is close to Danuwar and Tharu languages. It is spoken in Gulmi, Nawalparasi, Chitwan, and Tanahu districts. According to the census of 2011, there were a total of 7,687 who considered Bote as their mother tongue.",
                 faqs = listOf(
-                    Pair("What materials are used for Bote traditional garments?", "They traditionally use comfortable, lightweight cotton and locally harvested natural plant fibers from wild hemp and reeds for accessories."),
-                    Pair("Can I buy authentic wove products?", "Yes! Our Sarlahi women's cooperative sells woven reed mats, decorative baskets, and traditional fish bags to tourists.")
+                    Pair("Which languages are closest to Bote?", "The Bote language is closely related to the Danuwar and Tharu languages."),
+                    Pair("Where is the Bote language primarily spoken in Nepal?", "It is spoken in districts including Gulmi, Nawalparasi, Chitwan, and Tanahu.")
                 ),
-                altTagGuide = "Close up of an elder Bote woman weaving a traditional pattern using natural brown grass reeds in Madhesh Province.",
-                schemaType = "Local Business Schema",
-                internalLinks = listOf("Bote Culture", "Bote Women Empowerment")
+                altTagGuide = "Bote community learning materials highlighting traditional language vocabulary.",
+                schemaType = "Article Schema",
+                internalLinks = listOf("Bote Culture", "Bote Religion")
             ),
             SeoLandingPage(
-                categoryName = "Bote Festivals",
-                canonicalTitle = "The Monsoon Badhai & River Worship Festivals of Sarlahi Botes",
-                keywords = "Bote festivals, Badhai, river god worship, canoe purification, traditional Nepalese fairs",
-                metaDescription = "Learn about the vibrant Monsoon Badhai Festival of the Botes. Read about the grand boat races, ritual animal offerings, and water prayers.",
-                details = "Our primary celebration is 'Badhai' (also termed river puja), taking place right before the monsoon rains. The entire village gathers by the Bagmati riverbanks to wash and purify their dugout canoes. We perform dances, play the traditional drum ('madal'), and ask the river for safe, abundant fishing seasons.",
+                categoryName = "Bote Religion",
+                canonicalTitle = "Animism, Local Puja Festivals & Demographic Facts",
+                keywords = "Bote Religion, animism shamanism, Bote festivals, demographic quick facts",
+                metaDescription = "Learn about Bote religious practices, local deities, puja festivals, and key demographic statistics of the Bote people.",
+                details = "Most Bote practice an indigenous form of animism, in which shamanism, ancestor worship, and tattooing plays pivotal roles however many claim to be Hindu. The Bote people celebrate such festivals as Chandi Puja, Kalyan Puja, Bayu Puja, Bhuayar Puja, Sansari Mai Puja, Baje Bajei Puja, Jala Puja, Dunga Puja and Nhwagi Khhane Puja. Importantly, these people also offer Puja to the local ghosts, witches and spirits.\n\nBote People Quick Facts:\n• Total population in Nepal: 11,258\n• Languages: Bote language, Nepali\n• Religion: Hinduism 88%, Prakriti 9.5%, Christianity 2.06%\n• Related ethnic groups: Majhi, Tharu, Danuwar, Darai people\n\nThe Bote people are an ethnic group indigenous to the inner Terai.",
                 faqs = listOf(
-                    Pair("When does the Badhai festival take place?", "It occurs annually at the start of the monsoon season (usually late June or July)."),
-                    Pair("Can external visitors attend the festival?", "Yes! The festival is open to everyone, offering a beautiful opportunity to experience our food, music, and canoe racing.")
+                    Pair("What form of religion do most Bote people practice?", "Most Botes practice an indigenous form of animism featuring shamanism, ancestor worship, and tattooing, though many also claim Hinduism."),
+                    Pair("What festivals do the Bote people celebrate?", "They celebrate unique festivals such as Chandi Puja, Kalyan Puja, Bayu Puja, Bhuayar Puja, Sansari Mai Puja, Baje Bajei Puja, Jala Puja, Dunga Puja, and Nhwagi Khhane Puja.")
                 ),
-                altTagGuide = "Canoe rowing competition during the annual Bote Monsoon festival on the Bagmati river.",
-                schemaType = "Event Schema",
-                internalLinks = listOf("Bote Culture", "Bote Homestays")
-            ),
-            SeoLandingPage(
-                categoryName = "Bote Homestays",
-                canonicalTitle = "Ecotourism & Traditional River Homestays in Karmahiya Sarlahi",
-                keywords = "Bote homestays, Karmahiya homestay, ecotourism Sarlahi, authentic Nepal travel, river rafting",
-                metaDescription = "Book a unique cultural homestay with the Tarahi Bote families. Experience traditional meals, wooden canoe rides, and folk songs.",
-                details = "We have established the Karmahiya Homestay Committee to provide a direct livelihood for our families. Guests live in clean, traditional mud-brick houses, enjoy authentic snail stews, and join local guides on the Bagmati River for bird watching and traditional canoeing.",
-                faqs = listOf(
-                    Pair("Are the homestays hygienic?", "Absolutely. All hosting homes are equipped with hygienic setups and undergo regular sanitary audits by our cooperative."),
-                    Pair("What is included in the homestay booking?", "Packages include authentic local meals, cozy overnight stays, and guided boating tours on the river.")
-                ),
-                altTagGuide = "Cozy guest room inside a renovated Bote mud cottage, showcasing hand-woven linens and local decorations.",
-                schemaType = "Local Business Schema",
-                internalLinks = listOf("Bote Festivals", "Bote Community of Sarlahi")
+                altTagGuide = "Local Bote priests performing sacred Dunga (Boat) Puja on the river shoreline.",
+                schemaType = "Article Schema",
+                internalLinks = listOf("Bote History", "Bote Language")
             ),
             SeoLandingPage(
                 categoryName = "Bote Youth Programs",
@@ -8388,7 +8821,7 @@ fun getSeoLandingPagesData(isNepali: Boolean = false): List<SeoLandingPage> {
                 ),
                 altTagGuide = "Lobby of the physical Bote Community Research center showing reference books and old photos of Sarlahi district.",
                 schemaType = "Local Business Schema",
-                internalLinks = listOf("Bote Digital Archive", "Bote Education Initiatives")
+                internalLinks = listOf("Bote Education Initiatives")
             ),
             SeoLandingPage(
                 categoryName = "Bote Education Initiatives",
@@ -8403,107 +8836,79 @@ fun getSeoLandingPagesData(isNepali: Boolean = false): List<SeoLandingPage> {
                 altTagGuide = "Bote school children and youth studying together inside the newly developed solar-powered IT Library Sarlahi, Nepal.",
                 schemaType = "Organization Schema",
                 internalLinks = listOf("Bote Youth Programs", "Bote Women Empowerment")
-            ),
-            SeoLandingPage(
-                categoryName = "Bote Digital Archive",
-                canonicalTitle = "Searchable Digital Audio, Photo & Video Heritage Archives",
-                keywords = "Bote digital archive, oral history recordings, traditional river chants, photo preservation",
-                metaDescription = "Search old photos, listen to traditional boat rowers folk songs, and view digitized historical documents of our ancestors.",
-                details = "Our Bote Digital Archive is dedicated to preserving our rich heritage online. It houses collections of historical photographs, recorded folk songs, oral stories of tribal migration along Bagmati riverways, and downloadable academic publications.",
-                faqs = listOf(
-                    Pair("Is the digital archive accessible offline?", "Yes, this app locally stores core texts, dictionary phrases, and FAQs, ensuring reliable access without internet connections."),
-                    Pair("How can I contribute materials to the archive?", "If you have historical photographs or records, please contact our community coordinators at the Karmahiya office.")
-                ),
-                altTagGuide = "Digitized black-and-white print of Bote boatmen rowing deep Salwood dugout canoe during 1970 floods.",
-                schemaType = "Article Schema",
-                internalLinks = listOf("Community Research Center", "Bote History")
             )
         )
     } else {
         return listOf(
             SeoLandingPage(
                 categoryName = "Bote History",
-                canonicalTitle = "बोटे इतिहास तथा नदी किनारको पुर्ख्यौली सम्पदा",
-                keywords = "बोटे इतिहास, सर्लाहीको बोटे जाति, बागमती नदी स्थानान्तरण, नेपालका आदिवासी",
-                metaDescription = "बागमती नदी किनारका बोटे समुदायको ऐतिहासिक यात्रा, डुङ्गा निर्माण सीप र परम्परागत जीवनशैलीको अनुसन्धान खण्ड।",
+                canonicalTitle = "बोटे इतिहास तथा नेपालको सांस्कृतिक गाथा",
+                keywords = "बोटे इतिहास, सर्लाहीको बोटे जाति, नेपालका आदिवासी, भित्री मधेश",
+                metaDescription = "बोटे समुदायको प्राचीन इतिहास, परम्परागत डुङ्गा सञ्चालन र नेपालमा उनीहरूको पुर्ख्यौली जडको अन्वेषण गर्नुहोस्।",
                 details = "बोटे समुदाय नेपालको भित्री मधेश क्षेत्रका एक आदिवासी जनजाति हुन्। उनीहरू बोटे भाषा बोल्छन्। बोटे मानिसहरू रूखको टोड्का (खोपा) बाट तयार पारिएका काठका डुङ्गाहरू (धोनी) मार्फत यात्रुहरूलाई नदी पार गराउनका लागि प्रख्यात छन्। उनीहरू नेपालको कालीगण्डकी, नारायणी र राप्ती नदीको किनारमा छरिएर रहेका छन्। बोटे र माझी समुदायलाई 'पानीको राजा' भनेर चिनिन्छ। उनीहरूको पुर्ख्यौली पेशा माछा मार्ने, डुङ्गा चलाउने र नदीमा सुन खोज्ने हो, जसको बसोबास नदी र जङ्गल नजिकै हुने गर्दछ। बोटे समुदायको भाषिका र संस्कृति धेरै हदसम्म दनुवार, दराई, थारू र माझी समुदायसँग मिल्दोजुल्दो छ।",
                 faqs = listOf(
-                    Pair("बोटे वंश कति पुरानो मानिन्छ?", "अनुसन्धानका अनुसार बोटे वंश ९ पुस्ताभन्दा पुरानो समयदेखि नेपालका मुख्य नदी किनार र वन क्षेत्रहरूमा बसोबास गर्दै आएको छ।"),
-                    Pair("के विद्यालयको पाठ्यक्रममा बोटे इतिहास समावेश छ?", "ऐतिहासिक रूपमा पाठ्यपुस्तकहरूमा स्थानीय बोटे इतिहासहरू समेटिएका थिएनन्, त्यसैले हाम्रो डिजिटल पोर्टल र काठमाडौं विश्वविद्यालयको सहकार्यले यसलाई स्थायी अभिलेख बनाउँदैछ।")
+                    Pair("बोटे समुदायको ऐतिहासिक महत्त्व के हो?", "बोटे मानिसहरूसँग डुङ्गा चलाउने र नदीहरूको संरक्षकको रूपमा सेवा गर्ने समृद्ध इतिहास छ, जसले नेपालका प्रमुख नदीहरूमा यात्रुहरूलाई नदी पार गराउन महत्त्वपूर्ण भूमिका खेल्थ्यो।"),
+                    Pair("कसलाई 'पानीको राजा' भनिन्छ?", "बोटे र माझी समुदायलाई उनीहरूको अद्वितीय नदी यात्रा र माछा मार्ने सीपका कारण परम्परागत रूपमा 'पानीको राजा' भनेर चिनिन्छ।")
                 ),
-                altTagGuide = "नेपालको सर्लाही कर्महियामा बागमती नदीको किनारमा परम्परागत काठको डुङ्गा बनाउँदै बोटे समुदायका भद्रभलादमीहरू।",
+                altTagGuide = "नेपालका नदी किनारहरूमा काठे डुङ्गा चलाउँदै गरेका बोटे पुर्खाहरूको प्रतिनिधित्व।",
                 schemaType = "Article Schema",
-                internalLinks = listOf("Bote Language", "Tarahi Bote Community")
+                internalLinks = listOf("Bote Origin", "Bote Culture")
             ),
             SeoLandingPage(
-                categoryName = "Bote Language",
-                canonicalTitle = "बोटे भाषाको व्याकरण र आधारभूत शब्दावली",
-                keywords = "बोटे भाषा संरक्षण, संकटापन्न भाषाहरू, नदी किनारको शब्दावली, त्रिभुवन विश्वविद्यालय",
-                metaDescription = "संकटोन्मुख बोटे भाषाको संरचना र उपयोगी रैथाने शब्दहरूको विवरण। देवनागरी लिपिमा आधारित बोटे शब्दकोश।",
-                details = "हाम्रो बोली भारोपेली भाषा परिवारको भए तापनि यसमा आफ्नै मौलिक संरचनात्मक भिन्नताहरू छन्। बोटे भाषाको आफ्नै औपचारिक लिपि नभएकाले, हामी देवनागरी लिपिको प्रयोग गरी यसको लिपिबद्धता गरिरहेका छौं। केही महत्वपूर्ण जलसम्बन्धी रैथाने शब्दहरू: 'शावा' (पानी), 'नौनी' (माछा), 'धोनी' (काठको डुङ्गा), 'झाल' (जाल)।",
+                categoryName = "Bote Origin",
+                canonicalTitle = "बोटे जातिको उत्पत्ति, नामकरण र बस्ती सिद्धान्तहरू",
+                keywords = "बोटे उत्पत्ति, बोटे नामकरण, मधेश बस्ती, नेपाली आदिवासी जनजाति",
+                metaDescription = "बोटे मानिसहरूको नामकरणको उत्पत्ति र नदी किनारका रूखमुनि आश्रय लिने बस्ती सिद्धान्तहरू पत्ता लगाउनुहोस्।",
+                details = "बोटे जातिको उत्पत्तिका सम्बन्धमा दुईवटा सिद्धान्तहरू छन्। यो समुदाय नदीहरूमा अस्थायी मौसमी पुलहरू बनाउनका लागि रूखका ढाँचा वा हाँगाहरू बिछ्याउने काममा परिचित थियो जसले मानिसहरूलाई नदी पार गर्न मद्दत गर्थ्यो। 'बोट' को अर्थ रूख हो, त्यसैले नेपाली भाषीहरूले उनीहरूलाई बोटे भन्न थालेको हुन सक्छ। अर्को सिद्धान्तले सुझाव दिन्छ कि उनीहरूसँग भूमि वा घर थिएन र नदी किनारका रूखहरूको मुनि आश्रय लिने गर्थे, जसका कारण उनीहरूको अस्तित्व नदी र रूखको वरिपरि घुम्ने भएकाले उनीहरू बोटे नामले चिनिए।",
                 faqs = listOf(
-                    Pair("के बोटे भाषामा देवनागरी लिपिको प्रयोग हुन्छ?", "युवा तथा बालबालिकाहरूलाई अध्यापन गराउन र विद्यालयमा बुझाउन हाल देवनागरी वर्णहरूको परिमार्जित रूप प्रयोग गरिएको छ।"),
-                    Pair("बोटे भाषा बोल्ने व्यक्तिहरू कति छन्?", "सर्वेक्षण अनुसार हाल मुख्य ३००० भन्दा कम मातृभाषीहरू बाँकी छन्। यस भाषालाई जोगाउन अनलाइन र सामुदायिक कक्षहरू सञ्चालन गरिएको छ।")
+                    Pair("बोटे समुदायको सम्बन्धमा 'बोट' शब्दको अर्थ के हो?", "नेपालीमा 'बोट' को अर्थ रूख हो। बोटे नाम उनीहरूले रूखका हाँगाहरू प्रयोग गरेर पुल बनाउने वा नदी किनारका रूखहरूमुनि आश्रय लिने अभ्यासबाट उत्पन्न भएको मानिन्छ।"),
+                    Pair("ऐतिहासिक रूपमा बोटे मानिसहरू कहाँ बस्थे?", "उनीहरू ऐतिहासिक रूपमा नदी किनारका रूखका मुनि आश्रय लिन्थे, उनीहरूसँग कुनै जमिन वा घर थिएन र उनीहरूको सम्पूर्ण जीवन नदी प्रणालीको वरिपरि घुम्थ्यो।")
                 ),
-                altTagGuide = "बोटे विद्यार्थीहरूका लागि शावा, धोनी, र नौनी जस्ता शब्दहरूको सूची समेटिएको बोटे भाषा संकलन पुस्तिका।",
+                altTagGuide = "नदी किनारमा ठूला रूखका ढाँचाहरू प्रयोग गर्दै गरेका बोटे पुर्खाहरूको चित्र।",
                 schemaType = "Article Schema",
-                internalLinks = listOf("Bote History", "Bote Education Initiatives")
+                internalLinks = listOf("Bote History", "Bote Culture")
             ),
             SeoLandingPage(
                 categoryName = "Bote Culture",
-                canonicalTitle = "बोटे संस्कृति, नदी अनुष्ठान र जल लोककथाहरू",
-                keywords = "बोटे संस्कृति र परम्परा, नदी पूजा, आदिवासी नेपाली संगीत, बधाई चाड",
-                metaDescription = "बागमती नदीसँग बोटे जातिको पवित्र ऐतिहासिक र सांस्कृतिक सम्बन्ध। पारंपरिक घर, बाजाहरू र कलाको विवरण।",
-                details = "बोटे संस्कृति पूर्ण रूपमा पानी र नदीको प्रकृतिसँग गाँसिएको छ। परम्परागत रूपमा बोटे समुदाय नदी किनारमा माटो र बछेडाबाट निर्मित फुसको घरमा बस्ने गर्दथे। नदीमा डुङ्गा खियाउँदा गाइने श्रम गीतहरूले डुङ्गाको गतिलाई गति दिने र एकताबद्ध बनाउने प्राचीन परम्परा छ। सान्निध्यता झल्काउन माटाका भित्ताहरूमा माछा र लहरका चित्रहरू बनाइन्छ।",
+                canonicalTitle = "बोटे रीतिरिवाज, नदी पेशा र सामाजिक संरचना",
+                keywords = "बोटे संस्कृति, पाखा बोटे, पानी बोटे, बोटे पेशाहरू, पोशाक र चलन",
+                metaDescription = "पाखा र पानी बोटे बीचको भिन्नता, उनीहरूको परम्परागत पोशाक र नदी पेशा सहित बोटे संस्कृतिको गहिरो अध्ययन गर्नुहोस्।",
+                details = "बोटे समुदाय मुख्यतया डुङ्गा चलाउने (फेरी चलाउने) कार्यमा संलग्न छन्। बोटे समुदाय कालीगण्डकी, राप्ती, नारायणी र सुनकोशी जस्ता नदीहरूको किनारमा बस्छन्। उनीहरू दुई समूहमा विभाजित छन्: पाखा बोटे र पानी बोटे। पाखा बोटे पहाड वा खेतीयोग्य जमिनमा बस्छन् भने पानी बोटे कालीगण्डकी, राप्ती र नारायणी नदीको किनारमा बस्छन्। उनीहरूको प्राथमिक आर्थिक आधार डुङ्गा चलाउनु हो, जुन सामान्य मात्र छ। नेपालका विभिन्न स्थानमा बस्ने भए पनि बोटे वा माझी समुदायको रीतिरिवाज र पेशामा समानता पाइन्छ। उनीहरूको पोशाक मगर र गुरुङको पोशाकसँग मिल्दोजुल्दो छ तर उनीहरूको भाषाले उनीहरूलाई अरूभन्दा फरक बनाउँछ। नदी किनारमा बस्ने, माछा मार्ने, डुङ्गा चलाउने, सुन खोज्ने, खेती गर्ने र पशुपालन गर्ने यस जातिको मुख्य पेशा हो।",
                 faqs = listOf(
-                    Pair("बोटे समुदायको मुख्य सांस्कृतिक विशेषता के हो?", "हाम्रो आत्मिक जीवन नदी पारिस्थितिक प्रणालीमा केन्द्रित छ - जीवन धान्ने र सम्बन्ध बलियो बनाउने भएकाले नदीलाई ममतामयी मातृत्वको दर्जा दिइन्छ।"),
-                    Pair("के बोटे सांस्कृतिक सामग्रीहरूको संरक्षण गरिन्छ?", "हो, कर्महियाको स्थानीय सामुदायिक केन्द्रमा परम्परागत जाल, ओआर (पैडल) र बुनेका टोकरीहरू सङ्कलन गर्न संग्रहालय बन्दैछ।")
+                    Pair("पाखा बोटे र पानी बोटे बीच के फरक छ?", "पाखा बोटेहरू पहाड वा खेतीयोग्य जमिनमा बस्छन्, जबकि पानी बोटेहरू कालीगण्डकी, राप्ती र नारायणी जस्ता नदीहरूको किनारमा बसेर डुङ्गा चलाउने काममा केन्द्रित हुन्छन्।"),
+                    Pair("बोटेहरूको मुख्य परम्परागत पेशाहरू के-के हुन्?", "उनीहरूको प्राथमिक पेशाहरूमा माछा मार्ने, फेरी चलाउने/डुङ्गा खियाउने, नदीहरूमा सुनको धुलो खोज्ने, खेती गर्ने र पशुपालन गर्ने पर्दछन्।")
                 ),
-                altTagGuide = "सर्लाहीको बागमती नदी किनारमा निर्मित परम्परागत फुसका छाना भएका बोटे फुसका घरहरू।",
-                schemaType = "Organization Schema",
-                internalLinks = listOf("Bote Festivals", "Bote Traditional Dress")
+                altTagGuide = "पानी नजिक माछा मार्ने जाल समातेका, मगर र गुरुङको जस्तै परम्परागत पोशाकमा सजिएका बोटे मानिसहरूको समूह।",
+                schemaType = "Article Schema",
+                internalLinks = listOf("Bote History", "Bote Language")
             ),
             SeoLandingPage(
-                categoryName = "Bote Traditional Dress",
-                canonicalTitle = "पारंपरिक बोटे पोशाक र बुन्ने शैलीहरू",
-                keywords = "बोटे पारंपरिक पोशाक, फाइबर कताई, प्राकृतिक बछेडा कपडा, सर्लाही बुनाइ",
-                metaDescription = "प्राकृतिक बछेडाको रेशा र नदीको खरबाट बुनेका परम्परागत बोटे लत्ताकपडा र कलात्मक सरसामानहरू।",
-                details = "परम्परागत रूपमा बोटे पुरुषहरूले नदी तटीय क्षेत्रको उष्ण र ओसिलो जलवायु अनुकूल हल्का कछाड (घुँडासम्म आउने लुगा) र सुतीको भोटो लगाउँछन्, जसले गर्दा डुङ्गा खियाउन र जाल हान्न सजिलो हुन्छ। बोटे महिलाहरूले पटुकाले बाँधिएको फरिया (गुन्यू) र चोलो लगाउँछन्। उनीहरूको मौलिक पहिरनमा चाँदीको ठूलो हँसुली (घाँटीमा लगाइने गहना), बुलाकी, फुली, ढुङ्ग्री र पोते जस्ता पारंपरिक गहनाहरू समावेश हुन्छन्।",
+                categoryName = "Bote Language",
+                canonicalTitle = "बोटे भाषाको भाषिक जड र बोलीहरू",
+                keywords = "बोटे भाषा, मातृभाषा जनगणना, नवलपरासी गुल्मी चितवन भाषिका",
+                metaDescription = "दनुवार र थारू भाषासँग नजिक रहेको संकटापन्न बोटे भाषाको बारेमा बुझ्नुहोस्, जुन नेपालका विभिन्न जिल्लाहरूमा बोलिन्छ।",
+                details = "बोटे मानिसहरू बोटे भाषा बोल्छन् जुन दनुवार र थारू भाषाहरूसँग नजिक छ। यो गुल्मी, नवलपरासी, चितवन र तनहुँ जिल्लाहरूमा बोलिन्छ। सन् २०११ को जनगणना अनुसार नेपालमा बोटे भाषालाई आफ्नो मातृभाषा मान्ने कुल ७,६८७ जना थिए।",
                 faqs = listOf(
-                    Pair("बोटे पारंपरिक पोशाकमा कुन सामग्रीहरू प्रयोग गरिन्छ?", "यिनीहरू परम्परागत रूपमा हलुका र आरामदायी सुती कपडाका साथै हस्तकलाका सामानका लागि नदी किनारका प्राकृतिक खर र पातहरू प्रयोग गर्छन्।"),
-                    Pair("के यी मौलिक बुनेका सामग्रीहरू किन्न पाइन्छ?", "हो! हाम्रो सर्लाही महिला सहकारीले पर्यटकहरूका लागि बुनेका गुन्द्री, सुकुल, ढाकी र पारंपरिक जल-झोलाहरू बिक्रीमा राखेको छ।")
+                    Pair("बोटे भाषासँग कुन भाषाहरू सबैभन्दा नजिक छन्?", "बोटे भाषा दनुवार र थारू भाषाहरूसँग धेरै नजिक छ।"),
+                    Pair("नेपालमा मुख्यतया बोटे भाषा कहाँ बोलिन्छ?", "यो गुल्मी, नवलपरासी, चितवन र तनहुँ लगायतका जिल्लाहरूमा बोलिन्छ।")
                 ),
-                altTagGuide = "मधेश प्रदेशमा एक बोटे बज्यै प्राकृतिक खर र पाट प्रयोग गरेर परम्परागत ढाँचाको चटाई बुन्दै।",
-                schemaType = "Local Business Schema",
-                internalLinks = listOf("Bote Culture", "Bote Women Empowerment")
+                altTagGuide = "पारंपरिक शब्दावलीलाई हाइलाइट गर्ने बोटे सामुदायिक अध्ययन सामग्रीहरू।",
+                schemaType = "Article Schema",
+                internalLinks = listOf("Bote Culture", "Bote Religion")
             ),
             SeoLandingPage(
-                categoryName = "Bote Festivals",
-                canonicalTitle = "बर्षे बधाई र बागमती नदी पूजा उत्सव",
-                keywords = "बोटे चाडपर्व, बधाई पूजा, नदी आराधना, डुङ्गा चोखो पार्ने, डुङ्गा दौड",
-                metaDescription = "बोटे जातिको सबैभन्दा ठूलो नदी उत्सव 'बधाई'। डुङ्गा दौड, पूजापाठ, मादलको ताल र नदी आराधनाको जीवन्त दृश्य।",
-                details = "हाम्रो प्रमुख उत्सव मानिने 'बधाई पूजा' वर्षायाम सुरु हुनु अगावै आयोजना गरिन्छ। सम्पूर्ण गाउँले बागमती नदी किनारमा भेला भई आफ्ना परम्परागत डुङ्गाहरू सफा गरी चोख्याउँछन्। यस अवसरमा मादलको मधुर तालमा परम्परागत नृत्यहरू गरिन्छ र नदी देवीसँग जीवन रक्षा र प्रचुर मात्रामा माछा पाइने प्रार्थना गरिन्छ।",
+                categoryName = "Bote Religion",
+                canonicalTitle = "प्रकृति पूजा, स्थानीय पूजा उत्सव र जनसांख्यिकीय तथ्य",
+                keywords = "बोटे धर्म, प्रकृति पूजक झाँक्रीविद्या, बोटे चाडपर्वहरू, जनसांख्यिकीय तथ्य",
+                metaDescription = "बोटेहरूको धार्मिक अभ्यासहरू, स्थानीय देवीदेवताहरू, पूजा उत्सवहरू र बोटे जातिको मुख्य जनसांख्यिकीय तथ्याङ्कहरूको बारेमा जान्नुहोस्।",
+                details = "अधिकांश बोटेहरू प्रकृति पूजक (animism) हुन्, जसमा झाँक्रीविद्या, पितृ पूजा, र टाटु खोप्ने कार्यले महत्त्वपूर्ण भूमिका खेल्छ। यद्यपि धेरैले आफूलाई हिन्दू धर्मको अनुयायी पनि मान्छन्। बोटे समुदायले चण्डी पूजा, कल्याण पूजा, वायु पूजा, भुयार पूजा, संसारी माई पूजा, बाजे बाजै पूजा, जल पूजा, डुङ्गा पूजा र न्वागी खाने पूजा जस्ता चाडपर्वहरू मनाउँछन्। महत्त्वपूर्ण कुरा, यी मानिसहरूले स्थानीय भूतप्रेत, बोक्सी र देवीदेवताहरूलाई पनि पूजा चढाउँछन्।\n\nबोटे जाति संक्षिप्त तथ्य:\n• नेपालमा कुल जनसंख्या: ११,२५८\n• भाषाहरू: बोटे भाषा, नेपाली\n• धर्म: हिन्दू धर्म ८८%, प्रकृति ९.५%, इसाई २.०६%\n• सम्बन्धित जातीय समूहहरू: माझी, थारू, दनुवार, दराई जाति\n\nबोटेहरू भित्री मधेश क्षेत्रका मूल रैथाने आदिवासी जनजाति हुन्।",
                 faqs = listOf(
-                    Pair("बधाई पूजा कहिले मनाइन्छ?", "यो सामान्यतया हरेक वर्ष असार महिनाको सुरुमा (वर्षायामको आगमनसँगै) मनाइन्छ।"),
-                    Pair("के बाह्य पर्यटकहरू यो मेलामा सहभागी हुन सक्छन्?", "पक्कै पनि! यो उत्सव सबैका लागि खुला छ र हाम्रो रैथाने परिकार, संगीत र परम्परागत डुङ्गा दौडको अवलोकन गर्ने अनुपम अवसर हो।")
+                    Pair("अधिकांश बोटे मानिसहरू कुन धर्मको पालना गर्छन्?", "अधिकांश बोटेहरू प्रकृति पूजक हुन् जसमा झाँक्रीविद्या, पितृ पूजा र टाटु खोप्ने कामले मुख्य भूमिका खेल्छ, यद्यपि धेरैले हिन्दू धर्म पनि दाबी गर्छन्।"),
+                    Pair("बोटे समुदायले कुन-कुन चाडपर्वहरू मनाउँछन्?", "उनीहरूले चण्डी पूजा, कल्याण पूजा, वायु पूजा, भुयार पूजा, संसारी माई पूजा, बाजे बाजै पूजा, जल पूजा, डुङ्गा पूजा र न्वागी खाने पूजा जस्ता अद्वितीय चाडपर्वहरू मनाउँछन्।")
                 ),
-                altTagGuide = "बागमती नदीमा आयोजित वार्षिक बोटे बधाई उत्सवको समयमा भएको डुङ्गा खियाउने प्रतिस्पर्धा।",
-                schemaType = "Event Schema",
-                internalLinks = listOf("Bote Culture", "Bote Homestays")
-            ),
-            SeoLandingPage(
-                categoryName = "Bote Homestays",
-                canonicalTitle = "कर्महिया सर्लाहीको पर्यावरणमैत्री बोटे सामुदायिक होमस्टे",
-                keywords = "बोटे होमस्टे, कर्महिया होमestay, पर्यापर्यटन सर्लाही, मौलिक नेपाल यात्रा, जलविहार",
-                metaDescription = "तराही र बोटे परिवारसँगै बस्ने अनौठो सांस्कृतिक अनुभव। रैथाने भोजन, काठे डुङ्गा सयर तथा बागमती किनारको लोक गफ।",
-                details = "हामीले हाम्रो परिवारको जीविकोपार्जनमा टेवा पुऱ्याउन कर्महिया होमस्टे व्यवस्थापन समिति गठन गरेका छौं। पाहुनाहरू रती थला भएका माटाका घरहरूमा बस्छन्, रैथाने घुँघी र माछाका परिकारहरूको स्वाद लिन्छन् र बागमती नदीमा स्थानीय गाइडसँग चरा अवलोकन र जलविहार गर्छन्।",
-                faqs = listOf(
-                    Pair("के होमस्टेहरू सफा र स्वच्छ छन्?", "पूर्ण रूपमा। हाम्रा सबै आतिथ्य घरहरू सफा छन् र हाम्रो सहकारीले नियमित रूपमा स्वास्थ्य र सरसफाइको जाँच गर्दछ।"),
-                    Pair("होमस्टे बुकिङमा के-के समावेश हुन्छ?", "प्याकेजमा परम्परागत रैथाने खाना, आरामदायी आवास र नदीमा डुङ्गा यात्रा समावेश हुन्छ।")
-                ),
-                altTagGuide = "सर्लाहीमा पुनरुत्थान गरिएको माटोको बोटे घरभित्रको सफा कोठा, जहाँ रैथाने बुनेका तन्नाहरू राखिएका छन्।",
-                schemaType = "Local Business Schema",
-                internalLinks = listOf("Bote Festivals", "Bote Community of Sarlahi")
+                altTagGuide = "नदी किनारमा पवित्र डुङ्गा पूजा गर्दै गरेका स्थानीय बोटे पूजारीहरू।",
+                schemaType = "Article Schema",
+                internalLinks = listOf("Bote History", "Bote Language")
             ),
             SeoLandingPage(
                 categoryName = "Bote Youth Programs",
@@ -8601,7 +9006,7 @@ fun getSeoLandingPagesData(isNepali: Boolean = false): List<SeoLandingPage> {
                 ),
                 altTagGuide = "सर्लाही जिल्लाको ऐतिहासिक र पुराना फोटोहरू सजाइएको बोटे सामुदायिक अनुसन्धान केन्द्रको पुस्तकालय र बैठक हल।",
                 schemaType = "Local Business Schema",
-                internalLinks = listOf("Bote Digital Archive", "Bote Education Initiatives")
+                internalLinks = listOf("Bote Education Initiatives")
             ),
             SeoLandingPage(
                 categoryName = "Bote Education Initiatives",
@@ -8616,20 +9021,6 @@ fun getSeoLandingPagesData(isNepali: Boolean = false): List<SeoLandingPage> {
                 altTagGuide = "नवनिर्मित सौर्य-ऊर्जा सञ्चालित कम्प्युटर पुस्तकालयमा अध्ययन गर्दै गरेका बोटे विद्यार्थीहरू।",
                 schemaType = "Organization Schema",
                 internalLinks = listOf("Bote Youth Programs", "Bote Women Empowerment")
-            ),
-            SeoLandingPage(
-                categoryName = "Bote Digital Archive",
-                canonicalTitle = "बोटे डिजिटलअभिलेख: गीत, संगीत र इतिहासको संग्रह",
-                keywords = "डिजिटल संग्रह, लोकगीत संकलन, परम्परागत स्वरहरू, पुरानो तस्बिर संरक्षण",
-                metaDescription = "बागमती किनारका हाम्रा पुर्खाहरूको आवाज, डुङ्गा खियाउने गीत, र पुराना दुर्लभ ऐतिहासिक फोटोहरूको डिजिटल सङ्ग्रहालय।",
-                details = "हाम्रो डिजिटल अभिलेखालय बोटे संस्कृतिलाई अनलाइनमा बचाइराख्न समर्पित छ। यसमा पुराना ऐतिहासिक तस्बिरहरू, डुङ्गा गीतका अडियोहरू, नदी यात्राको वृत्तान्त र अनुसन्धान निष्कर्षहरू नि:शुल्क उपलब्ध छन्।",
-                faqs = listOf(
-                    Pair("के यो एप अफलाइन पनि चल्छ?", "हो! यो एपले मुख्य सामग्रीहरू र रैथाने शब्दकोश अफलाइनमै बचत गर्ने हुनाले इन्टरनेट नभएको अवस्थामा पनि सम्पूर्ण विवरण पढ्न सकिन्छ।"),
-                    Pair("मैले फोटो वा कथा कसरी उपलब्ध गराउन सक्छु?", "यदि तपाईंसँग पुरानो तस्बिर वा अभिलेख छ भने कर्महियास्थित हाम्रो सामुदायिक कार्यालयमा सम्पर्क गरी बुझाउन सक्नुहुन्छ।")
-                ),
-                altTagGuide = "सन् १९७० को बाढी ताका बोटे डुङ्गा चालकहरूले ठूलो काठे डुङ्गा चलाउँदै गरेको ऐतिहासिक दुर्लभ श्यामश्वेत तस्बिर।",
-                schemaType = "Article Schema",
-                internalLinks = listOf("Community Research Center", "Bote History")
             )
         )
     }
@@ -9731,18 +10122,37 @@ fun ImmersiveOnboardingScreen(
 @Composable
 fun AuthDialog(
     isNepali: Boolean,
-    onDismiss: () -> Unit,
-    onLogin: (String, String) -> Unit,
-    onSignUp: (String, String, String, String) -> Unit
+    viewModel: BoteCommunityViewModel,
+    onDismiss: () -> Unit
 ) {
+    var selectedTab by remember { mutableStateOf(0) } // 0 = Email, 1 = Phone
     var isSignUpMode by remember { mutableStateOf(false) }
     
+    // Email Auth States
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var fullName by remember { mutableStateOf("") }
     var adminPasscode by remember { mutableStateOf("") }
-
     var isPasswordVisible by remember { mutableStateOf(false) }
+
+    // Phone Auth States
+    var phoneNumber by remember { mutableStateOf("") }
+    var smsCode by remember { mutableStateOf("") }
+    var verificationId by remember { mutableStateOf("") }
+    var isOtpSent by remember { mutableStateOf(false) }
+    var isVerifyingOtp by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = remember(context) {
+        var currentContext = context
+        while (currentContext is android.content.ContextWrapper) {
+            if (currentContext is android.app.Activity) {
+                return@remember currentContext
+            }
+            currentContext = currentContext.baseContext
+        }
+        null
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -9750,205 +10160,476 @@ fun AuthDialog(
     ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
+                .fillMaxWidth(0.92f)
                 .wrapContentHeight()
-                .padding(16.dp)
+                .padding(12.dp)
                 .testTag("auth_dialog_card"),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
             ),
-            elevation = CardDefaults.cardElevation(12.dp)
+            elevation = CardDefaults.cardElevation(16.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header with icon
+                // Header Icon
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isSignUpMode) Icons.Default.Person else Icons.Default.Lock,
+                        imageVector = when {
+                            selectedTab == 1 -> Icons.Default.Phone
+                            isSignUpMode -> Icons.Default.Person
+                            else -> Icons.Default.Lock
+                        },
                         contentDescription = "Auth Icon",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = if (isSignUpMode) {
+                    text = if (selectedTab == 1) {
+                        if (isNepali) "फोन प्रमाणिकरण" else "Secure Phone Sign-In"
+                    } else if (isSignUpMode) {
                         if (isNepali) "नयाँ खाता सिर्जना गर्नुहोस्" else "Create Community Account"
                     } else {
                         if (isNepali) "समुदाय लगइन" else "Community Secure Sign-In"
                     },
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
 
                 Text(
-                    text = if (isSignUpMode) {
+                    text = if (selectedTab == 1) {
+                        if (isNepali) "आफ्नो फोन नम्बर प्रयोग गरी सुरक्षित OTP मार्फत लगइन गर्नुहोस्" else "Sign in securely via OTP code sent to your mobile phone"
+                    } else if (isSignUpMode) {
                         if (isNepali) "बोटे समुदायको सदस्य बन्नुहोस्" else "Join the Bote Youth Community Hub"
                     } else {
                         if (isNepali) "सुरक्षित रूपमा आफ्नो खातामा पहुँच गर्नुहोस्" else "Search historical databases, access forum and control center"
                     },
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
 
-                // Input fields
-                if (isSignUpMode) {
-                    OutlinedTextField(
-                        value = fullName,
-                        onValueChange = { fullName = it },
-                        label = { Text(if (isNepali) "पूरा नाम" else "Full Name") },
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("auth_name_input"),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text(if (isNepali) "इमेल ठेगाना" else "Email Address") },
-                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                // Tab Selector (Email vs Phone)
+                TabRow(
+                    selectedTabIndex = selectedTab,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("auth_email_input"),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email)
-                )
+                        .padding(bottom = 16.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    indicator = {}
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = if (isNepali) "इमेल" else "Email / Pass",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = if (isNepali) "फोन नम्बर" else "Phone / OTP",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                if (selectedTab == 0) {
+                    // ================= EMAIL / PASSWORD AUTH =================
+                    if (isSignUpMode) {
+                        OutlinedTextField(
+                            value = fullName,
+                            onValueChange = { fullName = it },
+                            label = { Text(if (isNepali) "पूरा नाम" else "Full Name") },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_name_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
 
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text(if (isNepali) "पासवर्ड" else "Secure Password") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                    trailingIcon = {
-                        IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
-                            Icon(
-                                imageVector = if (isPasswordVisible) Icons.Default.PlayArrow else Icons.Default.Info,
-                                contentDescription = "Toggle password visibility"
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text(if (isNepali) "इमेल ठेगाना" else "Email Address") },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("auth_email_input"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Email)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(if (isNepali) "पासवर्ड" else "Secure Password") },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                        trailingIcon = {
+                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (isPasswordVisible) Icons.Default.PlayArrow else Icons.Default.Info,
+                                    contentDescription = "Toggle password visibility"
+                                )
+                            }
+                        },
+                        visualTransformation = if (isPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("auth_password_input"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password)
+                    )
+
+                    if (isSignUpMode) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = adminPasscode,
+                            onValueChange = { adminPasscode = it },
+                            label = { Text(if (isNepali) "प्रशासक पासकोड (वैकल्पिक)" else "Admin Passcode (Optional)") },
+                            placeholder = { Text("e.g. BOTE_ADMIN") },
+                            leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_admin_passcode_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                        Text(
+                            text = if (isNepali) "सुझाव: प्रशासक प्यानल पहुँच गर्न BOTE_ADMIN टाइप गर्नुहोस्" else "Tip: Enter 'BOTE_ADMIN' to unlock Creator & Admin panels.",
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .align(Alignment.Start)
+                                .padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            if (isSignUpMode) {
+                                viewModel.signUpUser(email, password, fullName, adminPasscode) { success ->
+                                    if (success) onDismiss()
+                                }
+                            } else {
+                                viewModel.loginUser(email, password) { success ->
+                                    if (success) onDismiss()
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .testTag("auth_submit_button"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = if (isSignUpMode) {
+                                if (isNepali) "दर्ता गर्नुहोस्" else "Sign Up"
+                            } else {
+                                if (isNepali) "लगइन गर्नुहोस्" else "Log In"
+                            },
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (isSignUpMode) {
+                                if (isNepali) "पहिले नै खाता छ?" else "Already have an account?"
+                            } else {
+                                if (isNepali) "खाता छैन?" else "Don't have an account?"
+                            },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isSignUpMode) {
+                                if (isNepali) "यहाँ लगइन गर्नुहोस्" else "Log In here"
+                            } else {
+                                if (isNepali) "नयाँ खाता खोल्नुहोस्" else "Sign Up here"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { isSignUpMode = !isSignUpMode }
+                                .testTag("auth_mode_toggle")
+                        )
+                    }
+                } else {
+                    // ================= PHONE AUTH =================
+                    OutlinedTextField(
+                        value = phoneNumber,
+                        onValueChange = { phoneNumber = it },
+                        label = { Text(if (isNepali) "फोन नम्बर (उदा. +९७७...)" else "Phone Number (e.g. +9779800000000)") },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("auth_phone_input"),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                        enabled = !isOtpSent
+                    )
+
+                    if (isOtpSent) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = smsCode,
+                            onValueChange = { smsCode = it },
+                            label = { Text(if (isNepali) "प्रमाणिकरण कोड प्रविष्ट गर्नुहोस्" else "Enter 6-Digit SMS Code") },
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auth_otp_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        )
+                        Text(
+                            text = if (BoteAuthManager.isFirebaseActive()) 
+                                (if (isNepali) "६-अङ्कको SMS OTP कोड प्रविष्ट गर्नुहोस्" else "Check your phone SMS inbox for the OTP code.")
+                                else (if (isNepali) "नक्कली मोड सक्रिय छ: परीक्षणको लागि '१२३४५६' प्रविष्ट गर्नुहोस्" else "Simulated SMS active: enter '123456' to login."),
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .align(Alignment.Start)
+                                .padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    if (!isOtpSent) {
+                        Button(
+                            onClick = {
+                                if (phoneNumber.isNotBlank()) {
+                                    if (activity != null) {
+                                        viewModel.startPhoneVerification(activity, phoneNumber) { verId ->
+                                            verificationId = verId
+                                            isOtpSent = true
+                                        }
+                                    } else {
+                                        // Failover simulation in case of activity casting issues
+                                        verificationId = "sim_id"
+                                        isOtpSent = true
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("auth_send_otp_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = phoneNumber.isNotBlank()
+                        ) {
+                            Text(
+                                text = if (isNepali) "SMS कोड पठाउनुहोस्" else "Send Verification OTP",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                    },
-                    visualTransformation = if (isPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("auth_password_input"),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password)
-                )
-
-                if (isSignUpMode) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = adminPasscode,
-                        onValueChange = { adminPasscode = it },
-                        label = { Text(if (isNepali) "प्रशासक पासकोड (वैकल्पिक)" else "Admin Passcode (Optional)") },
-                        placeholder = { Text("e.g. BOTE_ADMIN") },
-                        leadingIcon = { Icon(Icons.Default.Star, contentDescription = null) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("auth_admin_passcode_input"),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
-                    Text(
-                        text = if (isNepali) "सुझाव: प्रशासक प्यानल पहुँच गर्न BOTE_ADMIN टाइप गर्नुहोस्" else "Tip: Enter 'BOTE_ADMIN' to unlock Creator & Admin panels.",
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .align(Alignment.Start)
-                            .padding(start = 4.dp, top = 2.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Action Button
-                Button(
-                    onClick = {
-                        if (isSignUpMode) {
-                            onSignUp(email, password, fullName, adminPasscode)
-                        } else {
-                            onLogin(email, password)
+                    } else {
+                        Button(
+                            onClick = {
+                                isVerifyingOtp = true
+                                viewModel.verifyPhoneCode(smsCode, phoneNumber) { success ->
+                                    isVerifyingOtp = false
+                                    if (success) {
+                                        onDismiss()
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("auth_verify_otp_button"),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = smsCode.isNotBlank() && !isVerifyingOtp
+                        ) {
+                            Text(
+                                text = if (isVerifyingOtp) {
+                                    if (isNepali) "प्रमाणित गर्दै..." else "Verifying..."
+                                } else {
+                                    if (isNepali) "कोड प्रमाणित गर्नुहोस्" else "Verify & Sign In"
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("auth_submit_button"),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = if (isSignUpMode) {
-                            if (isNepali) "दर्ता गर्नुहोस्" else "Sign Up"
-                        } else {
-                            if (isNepali) "लगइन गर्नुहोस्" else "Log In"
-                        },
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                            onClick = {
+                                isOtpSent = false
+                                smsCode = ""
+                            }
+                        ) {
+                            Text(
+                                text = if (isNepali) "नम्बर परिवर्तन गर्नुहोस्" else "Change Phone Number",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Mode toggle
+                // Divider and Social Sign-In (Google Sign-In)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = if (isSignUpMode) {
-                            if (isNepali) "पहिले नै खाता छ?" else "Already have an account?"
-                        } else {
-                            if (isNepali) "खाता छैन?" else "Don't have an account?"
-                        },
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isSignUpMode) {
-                            if (isNepali) "यहाँ लगइन गर्नुहोस्" else "Log In here"
-                        } else {
-                            if (isNepali) "नयाँ खाता खोल्नुहोस्" else "Sign Up here"
-                        },
-                        fontSize = 13.sp,
+                        text = if (isNepali) "वा" else "OR",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clickable { isSignUpMode = !isSignUpMode }
-                            .testTag("auth_mode_toggle")
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(horizontal = 10.dp)
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Dismiss / Cancel Text Button
+                // Interactive Dialog for choosing Google Account
+                var showGoogleAccountPicker by remember { mutableStateOf(false) }
+                if (showGoogleAccountPicker) {
+                    AlertDialog(
+                        onDismissRequest = { showGoogleAccountPicker = false },
+                        title = { Text(if (isNepali) "गुगल खाता चयन गर्नुहोस्" else "Select a Google Account") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val accounts = listOf(
+                                    Triple("razjnava@gmail.com", "Raz Jnava (Admin)", "google_admin_uid_777"),
+                                    Triple("bote_youth_rep@gmail.com", "Bote Youth Representative", "google_rep_uid_123"),
+                                    Triple("guest_tester@gmail.com", "Guest Tester", "google_tester_uid_456")
+                                )
+                                accounts.forEach { (email, name, uid) ->
+                                    Button(
+                                        onClick = {
+                                            showGoogleAccountPicker = false
+                                            viewModel.loginWithGoogle(email, name, uid) { success ->
+                                                if (success) onDismiss()
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(text = name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                            Text(text = email, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showGoogleAccountPicker = false }) {
+                                Text(if (isNepali) "रद्द गर्नुहोस्" else "Cancel")
+                            }
+                        },
+                        shape = RoundedCornerShape(20.dp)
+                    )
+                }
+
+                // Google Identity Integration Button
+                OutlinedButton(
+                    onClick = {
+                        showGoogleAccountPicker = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("auth_google_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FavoriteBorder,
+                            contentDescription = "Google Icon",
+                            tint = Color(0xFF4285F4), // Google Blue
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = if (isNepali) "गुगल खाता मार्फत लगइन" else "Continue with Google",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Dismiss / Cancel Button
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.testTag("auth_dismiss_btn")

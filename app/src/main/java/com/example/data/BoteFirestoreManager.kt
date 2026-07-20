@@ -347,6 +347,7 @@ object BoteFirestoreManager {
             applicantName = this["applicantName"] as? String ?: "",
             email = this["email"] as? String ?: "",
             phone = this["phone"] as? String ?: "",
+            age = this["age"] as? String ?: "",
             details = this["details"] as? String ?: "",
             timestamp = (this["timestamp"] as? Number)?.toLong() ?: System.currentTimeMillis(),
             status = this["status"] as? String ?: "Under Review"
@@ -360,6 +361,7 @@ object BoteFirestoreManager {
             "applicantName" to applicantName,
             "email" to email,
             "phone" to phone,
+            "age" to age,
             "details" to details,
             "timestamp" to timestamp,
             "status" to status

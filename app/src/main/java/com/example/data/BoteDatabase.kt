@@ -17,7 +17,7 @@ import androidx.room.RoomDatabase
         AppUpdate::class,
         BoteDonation::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class BoteDatabase : RoomDatabase() {

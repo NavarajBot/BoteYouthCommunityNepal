@@ -23,7 +23,7 @@ import com.google.android.play.core.install.model.UpdateAvailability
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var appUpdateManager: AppUpdateManager
+    private var appUpdateManager: AppUpdateManager? = null
     private val UPDATE_REQUEST_CODE = 1234
 
     @android.annotation.SuppressLint("InvalidFragmentVersionForActivityResult")
@@ -50,9 +50,13 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        // Initialize Google Play Core AppUpdateManager
-        appUpdateManager = AppUpdateManagerFactory.create(this)
-        checkForAppUpdates()
+        // Initialize Google Play Core AppUpdateManager with robust exception handling
+        try {
+            appUpdateManager = AppUpdateManagerFactory.create(this)
+            checkForAppUpdates()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to initialize AppUpdateManager: ${e.message}")
+        }
         
         // Core state manager initialization
         val viewModel = ViewModelProvider(this)[BoteCommunityViewModel::class.java]
@@ -65,44 +69,56 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkForAppUpdates() {
-        val appUpdateInfoTask = appUpdateManager.appUpdateInfo
-        appUpdateInfoTask.addOnSuccessListener { appUpdateInfo ->
-            if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
-                && appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)
-            ) {
-                // Request the update
-                try {
-                    appUpdateManager.startUpdateFlowForResult(
-                        appUpdateInfo,
-                        this,
-                        AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
-                        UPDATE_REQUEST_CODE
-                    )
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Failed to start update flow", e)
+        val manager = appUpdateManager ?: return
+        try {
+            val appUpdateInfoTask = manager.appUpdateInfo
+            appUpdateInfoTask.addOnSuccessListener { appUpdateInfo ->
+                if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                    && appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)
+                ) {
+                    // Request the update
+                    try {
+                        manager.startUpdateFlowForResult(
+                            appUpdateInfo,
+                            this,
+                            AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
+                            UPDATE_REQUEST_CODE
+                        )
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to start update flow", e)
+                    }
                 }
+            }.addOnFailureListener {
+                Log.e("MainActivity", "Failed to check for app update", it)
             }
-        }.addOnFailureListener {
-            Log.e("MainActivity", "Failed to check for app update", it)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Exception while calling appUpdateInfo: ${e.message}")
         }
     }
 
     override fun onResume() {
         super.onResume()
+        val manager = appUpdateManager ?: return
         // If an in-app update is already running, resume it.
-        appUpdateManager.appUpdateInfo.addOnSuccessListener { appUpdateInfo ->
-            if (appUpdateInfo.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
-                try {
-                    appUpdateManager.startUpdateFlowForResult(
-                        appUpdateInfo,
-                        this,
-                        AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
-                        UPDATE_REQUEST_CODE
-                    )
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Failed to resume update flow", e)
+        try {
+            manager.appUpdateInfo.addOnSuccessListener { appUpdateInfo ->
+                if (appUpdateInfo.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
+                    try {
+                        manager.startUpdateFlowForResult(
+                            appUpdateInfo,
+                            this,
+                            AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
+                            UPDATE_REQUEST_CODE
+                        )
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to resume update flow", e)
+                    }
                 }
+            }.addOnFailureListener {
+                Log.e("MainActivity", "Failed to get app update info in onResume", it)
             }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Exception while getting appUpdateInfo in onResume: ${e.message}")
         }
     }
 }

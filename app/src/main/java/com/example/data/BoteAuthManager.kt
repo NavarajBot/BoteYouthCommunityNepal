@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -251,7 +254,7 @@ object BoteAuthManager {
             fullName = fullName,
             role = role,
             uid = uid,
-            isFirebaseUser = false
+            isFirebaseUser = isFirebaseAvailable
         )
         return try {
             val db = BoteDatabase.getDatabase(context)
@@ -267,6 +270,164 @@ object BoteAuthManager {
                     )
                 )
             }
+            _currentUser.value = loggedUser
+            Result.success(loggedUser)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private var phoneVerificationId: String? = null
+    private var phoneResendToken: com.google.firebase.auth.PhoneAuthProvider.ForceResendingToken? = null
+
+    fun startPhoneVerification(
+        activity: android.app.Activity,
+        phoneNumber: String,
+        onCodeSent: (verificationId: String) -> Unit,
+        onVerificationCompleted: (AuthUser) -> Unit,
+        onVerificationFailed: (Exception) -> Unit
+    ) {
+        if (!isFirebaseAvailable) {
+            // Local fallback simulation for testing without Firebase credentials active
+            val simUid = "phone_sim_" + phoneNumber.hashCode()
+            val simulatedUser = AuthUser(
+                email = "phone_${phoneNumber.replace("+", "").replace(" ", "")}@bote.org",
+                fullName = "Phone User ($phoneNumber)",
+                role = "standard",
+                uid = simUid,
+                isFirebaseUser = false
+            )
+            phoneVerificationId = "sim_verification_id_for_${phoneNumber.hashCode()}"
+            onCodeSent(phoneVerificationId!!)
+            return
+        }
+
+        try {
+            val auth = firebaseAuth ?: throw Exception("Firebase Auth not initialized")
+            
+            val callbacks = object : com.google.firebase.auth.PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                override fun onVerificationCompleted(credential: com.google.firebase.auth.PhoneAuthCredential) {
+                    Log.d(TAG, "Phone Auth: automatically verified.")
+                    activity.runOnUiThread {
+                        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+                        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            try {
+                                val authResult = auth.signInWithCredential(credential).awaitTask()
+                                val user = authResult.user ?: throw Exception("Phone sign-in failed")
+                                val loggedUser = AuthUser(
+                                    email = user.email ?: "phone_${phoneNumber.replace("+", "").replace(" ", "")}@bote.org",
+                                    fullName = user.displayName ?: "Phone User ($phoneNumber)",
+                                    role = "standard",
+                                    uid = user.uid,
+                                    isFirebaseUser = true
+                                )
+                                _currentUser.value = loggedUser
+                                onVerificationCompleted(loggedUser)
+                            } catch (e: Exception) {
+                                onVerificationFailed(e)
+                            }
+                        }
+                    }
+                }
+
+                override fun onVerificationFailed(e: com.google.firebase.FirebaseException) {
+                    Log.e(TAG, "Phone Auth: verification failed", e)
+                    onVerificationFailed(e)
+                }
+
+                override fun onCodeSent(
+                    verificationId: String,
+                    token: com.google.firebase.auth.PhoneAuthProvider.ForceResendingToken
+                ) {
+                    Log.d(TAG, "Phone Auth: SMS code sent. Verification ID: $verificationId")
+                    phoneVerificationId = verificationId
+                    phoneResendToken = token
+                    onCodeSent(verificationId)
+                }
+            }
+
+            val options = com.google.firebase.auth.PhoneAuthOptions.newBuilder(auth)
+                .setPhoneNumber(phoneNumber)
+                .setTimeout(60L, java.util.concurrent.TimeUnit.SECONDS)
+                .setActivity(activity)
+                .setCallbacks(callbacks)
+                .build()
+            
+            com.google.firebase.auth.PhoneAuthProvider.verifyPhoneNumber(options)
+        } catch (e: Exception) {
+            Log.e(TAG, "Phone Auth startup error: ${e.message}")
+            onVerificationFailed(e)
+        }
+    }
+
+    suspend fun verifyPhoneCode(
+        context: Context,
+        smsCode: String,
+        phoneNumber: String
+    ): Result<AuthUser> {
+        val verificationId = phoneVerificationId ?: return Result.failure(Exception("No active phone verification session found"))
+        
+        if (!isFirebaseAvailable || verificationId.startsWith("sim_")) {
+            // Local fallback OTP verification
+            if (smsCode == "123456" || smsCode == "654321" || smsCode.trim().length == 6) {
+                val simUid = "phone_sim_" + phoneNumber.hashCode()
+                val loggedUser = AuthUser(
+                    email = "phone_${phoneNumber.replace("+", "").replace(" ", "")}@bote.org",
+                    fullName = "Phone User ($phoneNumber)",
+                    role = "standard",
+                    uid = simUid,
+                    isFirebaseUser = false
+                )
+                
+                val db = BoteDatabase.getDatabase(context)
+                val existing = db.boteDao().getUserByEmail(loggedUser.email)
+                if (existing == null) {
+                    db.boteDao().insertUser(
+                        BoteUser(
+                            email = loggedUser.email,
+                            passwordHash = "phone_auth_linked",
+                            fullName = loggedUser.fullName,
+                            role = loggedUser.role,
+                            uid = simUid
+                        )
+                    )
+                }
+                
+                _currentUser.value = loggedUser
+                return Result.success(loggedUser)
+            } else {
+                return Result.failure(Exception("Invalid SMS OTP verification code. Enter '123456' as simulated code."))
+            }
+        }
+
+        return try {
+            val auth = firebaseAuth ?: throw Exception("Firebase Auth not initialized")
+            val credential = com.google.firebase.auth.PhoneAuthProvider.getCredential(verificationId, smsCode)
+            val authResult = auth.signInWithCredential(credential).awaitTask()
+            val user = authResult.user ?: throw Exception("Sign in failed with phone credential")
+            
+            val loggedUser = AuthUser(
+                email = user.email ?: "phone_${phoneNumber.replace("+", "").replace(" ", "")}@bote.org",
+                fullName = user.displayName ?: "Phone User ($phoneNumber)",
+                role = "standard",
+                uid = user.uid,
+                isFirebaseUser = true
+            )
+            
+            val db = BoteDatabase.getDatabase(context)
+            val existing = db.boteDao().getUserByEmail(loggedUser.email)
+            if (existing == null) {
+                db.boteDao().insertUser(
+                    BoteUser(
+                        email = loggedUser.email,
+                        passwordHash = "phone_auth_linked",
+                        fullName = loggedUser.fullName,
+                        role = loggedUser.role,
+                        uid = user.uid
+                    )
+                )
+            }
+            
             _currentUser.value = loggedUser
             Result.success(loggedUser)
         } catch (e: Exception) {

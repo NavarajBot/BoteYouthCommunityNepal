@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "696867431136",
+    "firebase_url": "https://boteyouthcommunitynepal-6e7df-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "boteyouthcommunitynepal-6e7df",
+    "storage_bucket": "boteyouthcommunitynepal-6e7df.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696867431136:android:b627ab96fb77f6dbda2685",
+        "android_client_info": {
+          "package_name": "com.aistudio.botecommunity.tarahi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdRkL8oLtQiMnrq-dGl0mgdRdS8ssLMsI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
